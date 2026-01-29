@@ -53,6 +53,11 @@ struct GeneralSettings: View {
                         binding: self.$state.canvasEnabled)
 
                     SettingsToggleRow(
+                        title: "Modern chat UI",
+                        subtitle: "Use the 2026 message-card layout instead of classic bubbles.",
+                        binding: self.$state.modernChatUIEnabled)
+
+                    SettingsToggleRow(
                         title: "Allow Camera",
                         subtitle: "Allow the agent to capture a photo or short video via the built-in camera.",
                         binding: self.$cameraEnabled)

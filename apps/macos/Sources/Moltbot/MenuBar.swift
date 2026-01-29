@@ -35,6 +35,7 @@ struct MoltbotApp: App {
         MoltbotLogging.bootstrapIfNeeded()
         Self.applyAttachOnlyOverrideIfNeeded()
         _state = State(initialValue: AppStateStore.shared)
+        ModernChatCanvasBridge.setup()
     }
 
     var body: some Scene {

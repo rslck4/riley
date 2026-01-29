@@ -161,7 +161,7 @@ final class WebChatSwiftUIWindowController {
             viewModel: vm,
             showsSessionSwitcher: true,
             userAccent: accent,
-            modernUIEnabled: true))
+            modernUIEnabled: AppStateStore.shared.modernChatUIEnabled))
         self.contentController = Self.makeContentController(for: presentation, hosting: self.hosting)
         self.window = Self.makeWindow(for: presentation, contentViewController: self.contentController)
     }

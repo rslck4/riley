@@ -241,11 +241,10 @@ public struct MoltbotChatView: View {
         }
 
         if let text = self.viewModel.streamingAssistantText, AssistantTextParser.hasVisibleContent(in: text) {
-            ChatStreamingAssistantBubble(text: text, markdownVariant: self.markdownVariant)
+            ModernStreamingAssistantCard(text: text, markdownVariant: self.markdownVariant)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-
 
     private var visibleMessages: [MoltbotChatMessage] {
         let base: [MoltbotChatMessage]
