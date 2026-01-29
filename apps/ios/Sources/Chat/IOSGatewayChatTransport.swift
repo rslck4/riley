@@ -40,6 +40,14 @@ struct IOSGatewayChatTransport: MoltbotChatTransport, Sendable {
         struct Subscribe: Codable { var sessionKey: String }
         let data = try JSONEncoder().encode(Subscribe(sessionKey: sessionKey))
         let json = String(data: data, encoding: .utf8)
+
+        let role = await self.gateway.currentRole()
+        if role != "node" {
+            // Operator/UI connections cannot call node.event; gateway chat events are broadcast to operators anyway.
+            self.logger.info("chat.subscribe skipped (role=\(role, privacy: .public)) sessionKey=\(sessionKey, privacy: .public)")
+            return
+        }
+
         self.logger.info("chat.subscribe -> sessionKey=\(sessionKey, privacy: .public)")
         await self.gateway.sendEvent(event: "chat.subscribe", payloadJSON: json)
     }

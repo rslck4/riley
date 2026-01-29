@@ -57,6 +57,10 @@ public actor GatewayNodeSession {
 
     public init() {}
 
+    public func currentRole() -> String {
+        return self.connectOptions?.role.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
     public func connect(
         url: URL,
         token: String?,
@@ -138,6 +142,14 @@ public actor GatewayNodeSession {
 
     public func sendEvent(event: String, payloadJSON: String?) async {
         guard let channel = self.channel else { return }
+
+        let role = self.currentRole()
+        // Events are a node/bridge pathway on the gateway. Operator clients should not use node.event.
+        if role != "node" {
+            self.logger.warning("sendEvent ignored for role=\(role, privacy: .public) event=\(event, privacy: .public)")
+            return
+        }
+
         let params: [String: AnyCodable] = [
             "event": AnyCodable(event),
             "payloadJSON": AnyCodable(payloadJSON ?? NSNull()),
