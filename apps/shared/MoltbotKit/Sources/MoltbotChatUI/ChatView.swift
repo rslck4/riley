@@ -236,8 +236,7 @@ public struct MoltbotChatView: View {
             ModernChatActivityRow(
                 title: "Working",
                 subtitle: "\(self.viewModel.pendingToolCalls.count) tool call(s)…",
-                details: self.viewModel.pendingToolCalls.map { $0.name }.joined(separator: "
-"))
+                details: self.viewModel.pendingToolCalls.map { $0.name }.joined(separator: "\n"))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
 
