@@ -20,7 +20,9 @@ struct ModernChatMessageCard: View {
                 isUser: self.isUser,
                 style: self.style,
                 markdownVariant: self.markdownVariant,
-                userAccent: self.userAccent                userAccent: selfdth: 760, alignment: self.isUser ? .trailing : .leading)
+                userAccent: self.userAccent)
+        }
+        .frame(maxWidth: 760, alignment: self.isUser ? .trailing : .leading)
         .frame(maxWidth: .infinity, alignment: self.isUser ? .trailing : .leading)
         .padding(.horizontal, 2)
     }
@@ -192,7 +194,6 @@ private struct ModernChatCardContainer<Content: View>: View {
 
     var body: some View {
         content
-            .padding(.vertical, 2)
             .background(self.background)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
