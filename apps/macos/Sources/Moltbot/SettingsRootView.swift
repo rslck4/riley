@@ -18,7 +18,6 @@ struct SettingsRootView: View {
     }
 
     var body: some View {
-        ScrollView {
             VStack(alignment: .leading, spacing: 12) {
             if self.isNixMode {
                 self.nixManagedBanner
@@ -74,8 +73,6 @@ struct SettingsRootView: View {
                     .tag(SettingsTab.about)
             }
         }
-        }
-        .scrollIndicators(.automatic)
         .padding(.horizontal, 28)
         .padding(.vertical, 22)
         .frame(minWidth: SettingsTab.windowMinWidth, minHeight: SettingsTab.windowMinHeight, alignment: .topLeading)
