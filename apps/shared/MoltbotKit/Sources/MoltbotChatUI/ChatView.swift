@@ -18,6 +18,7 @@ public struct MoltbotChatView: View {
     private let style: Style
     private let markdownVariant: ChatMarkdownVariant
     private let userAccent: Color?
+    private let modernUIEnabled: Bool
 
     private enum Layout {
         #if os(macOS)
@@ -46,13 +47,15 @@ public struct MoltbotChatView: View {
         showsSessionSwitcher: Bool = false,
         style: Style = .standard,
         markdownVariant: ChatMarkdownVariant = .standard,
-        userAccent: Color? = nil)
+        userAccent: Color? = nil,
+        modernUIEnabled: Bool = false)
     {
         self._viewModel = State(initialValue: viewModel)
         self.showsSessionSwitcher = showsSessionSwitcher
         self.style = style
         self.markdownVariant = markdownVariant
         self.userAccent = userAccent
+        self.modernUIEnabled = modernUIEnabled
     }
 
     public var body: some View {
@@ -90,7 +93,11 @@ public struct MoltbotChatView: View {
         ZStack {
             ScrollView {
                 LazyVStack(spacing: Layout.messageSpacing) {
+                    if self.modernUIEnabled {
+                    self.messageListRowsModern
+                } else {
                     self.messageListRows
+                }
 
                     Color.clear
                         #if os(macOS)
@@ -205,6 +212,41 @@ public struct MoltbotChatView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    @ViewBuilder
+    private var messageListRowsModern: some View {
+        ForEach(self.visibleMessages) { msg in
+            ModernChatMessageCard(
+                message: msg,
+                style: self.style,
+                markdownVariant: self.markdownVariant,
+                userAccent: self.userAccent)
+                .frame(maxWidth: .infinity, alignment: msg.role.lowercased() == "user" ? .trailing : .leading)
+        }
+
+        if self.viewModel.pendingRunCount > 0 {
+            HStack {
+                ChatTypingIndicatorBubble(style: self.style)
+                    .equatable()
+                Spacer(minLength: 0)
+            }
+        }
+
+        if !self.viewModel.pendingToolCalls.isEmpty {
+            ModernChatActivityRow(
+                title: "Working",
+                subtitle: "\(self.viewModel.pendingToolCalls.count) tool call(s)…",
+                details: self.viewModel.pendingToolCalls.map { $0.text ?? $0.name ?? "tool" }.joined(separator: "
+"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        if let text = self.viewModel.streamingAssistantText, AssistantTextParser.hasVisibleContent(in: text) {
+            ChatStreamingAssistantBubble(text: text, markdownVariant: self.markdownVariant)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
 
     private var visibleMessages: [MoltbotChatMessage] {
         let base: [MoltbotChatMessage]
