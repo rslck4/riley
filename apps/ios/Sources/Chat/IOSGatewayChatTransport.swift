@@ -2,8 +2,10 @@ import MoltbotChatUI
 import MoltbotKit
 import MoltbotProtocol
 import Foundation
+import OSLog
 
 struct IOSGatewayChatTransport: MoltbotChatTransport, Sendable {
+    private let logger = Logger(subsystem: "bot.molt", category: "chat.transport")
     private let gateway: GatewayNodeSession
 
     init(gateway: GatewayNodeSession) {
@@ -28,7 +30,9 @@ struct IOSGatewayChatTransport: MoltbotChatTransport, Sendable {
         }
         let data = try JSONEncoder().encode(Params(includeGlobal: true, includeUnknown: false, limit: limit))
         let json = String(data: data, encoding: .utf8)
+        self.logger.info("sessions.list -> start limit=\(String(describing: limit), privacy: .public)")
         let res = try await self.gateway.request(method: "sessions.list", paramsJSON: json, timeoutSeconds: 15)
+        self.logger.info("sessions.list -> ok bytes=\(res.count, privacy: .public)")
         return try JSONDecoder().decode(MoltbotChatSessionsListResponse.self, from: res)
     }
 
@@ -36,6 +40,7 @@ struct IOSGatewayChatTransport: MoltbotChatTransport, Sendable {
         struct Subscribe: Codable { var sessionKey: String }
         let data = try JSONEncoder().encode(Subscribe(sessionKey: sessionKey))
         let json = String(data: data, encoding: .utf8)
+        self.logger.info("chat.subscribe -> sessionKey=\(sessionKey, privacy: .public)")
         await self.gateway.sendEvent(event: "chat.subscribe", payloadJSON: json)
     }
 
@@ -43,7 +48,9 @@ struct IOSGatewayChatTransport: MoltbotChatTransport, Sendable {
         struct Params: Codable { var sessionKey: String }
         let data = try JSONEncoder().encode(Params(sessionKey: sessionKey))
         let json = String(data: data, encoding: .utf8)
+        self.logger.info("chat.history -> start sessionKey=\(sessionKey, privacy: .public)")
         let res = try await self.gateway.request(method: "chat.history", paramsJSON: json, timeoutSeconds: 15)
+        self.logger.info("chat.history -> ok bytes=\(res.count, privacy: .public)")
         return try JSONDecoder().decode(MoltbotChatHistoryPayload.self, from: res)
     }
 
@@ -72,13 +79,17 @@ struct IOSGatewayChatTransport: MoltbotChatTransport, Sendable {
             idempotencyKey: idempotencyKey)
         let data = try JSONEncoder().encode(params)
         let json = String(data: data, encoding: .utf8)
+        self.logger.info("chat.send -> start sessionKey=\(sessionKey, privacy: .public) thinking=\(thinking, privacy: .public) chars=\(message.count, privacy: .public)")
         let res = try await self.gateway.request(method: "chat.send", paramsJSON: json, timeoutSeconds: 35)
+        self.logger.info("chat.send -> ok bytes=\(res.count, privacy: .public)")
         return try JSONDecoder().decode(MoltbotChatSendResponse.self, from: res)
     }
 
     func requestHealth(timeoutMs: Int) async throws -> Bool {
         let seconds = max(1, Int(ceil(Double(timeoutMs) / 1000.0)))
+        self.logger.info("health -> start timeoutMs=\(timeoutMs, privacy: .public)")
         let res = try await self.gateway.request(method: "health", paramsJSON: nil, timeoutSeconds: seconds)
+        self.logger.info("health -> ok bytes=\(res.count, privacy: .public)")
         return (try? JSONDecoder().decode(MoltbotGatewayHealthOK.self, from: res))?.ok ?? true
     }
 
