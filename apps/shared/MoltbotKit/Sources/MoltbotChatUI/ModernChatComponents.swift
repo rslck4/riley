@@ -73,7 +73,7 @@ private struct ModernChatMessageContent: View {
                 ForEach(self.inlineToolResults.indices, id: \.self) { idx in
                     let toolResult = self.inlineToolResults[idx]
                     ToolResultCard(
-                        title: "🔧 \(toolResult.name ?? \"tool\")",
+                        title: "🔧 \(toolResult.name ?? "tool")",
                         text: toolResult.text ?? "",
                         isUser: self.isUser)
                 }
