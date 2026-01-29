@@ -89,8 +89,7 @@ private struct ModernChatMessageContent: View {
             guard kind == "text" || kind.isEmpty else { return nil }
             return content.text
         }
-        return parts.joined(separator: "
-").trimmingCharacters(in: .whitespacesAndNewlines)
+        return parts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var inlineAttachments: [MoltbotChatMessageContent] {
