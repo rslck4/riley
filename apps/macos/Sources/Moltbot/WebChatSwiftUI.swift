@@ -160,7 +160,8 @@ final class WebChatSwiftUIWindowController {
         self.hosting = NSHostingController(rootView: MoltbotChatView(
             viewModel: vm,
             showsSessionSwitcher: true,
-            userAccent: accent))
+            userAccent: accent,
+            modernUIEnabled: true))
         self.contentController = Self.makeContentController(for: presentation, hosting: self.hosting)
         self.window = Self.makeWindow(for: presentation, contentViewController: self.contentController)
     }
