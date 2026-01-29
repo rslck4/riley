@@ -18,7 +18,8 @@ struct SettingsRootView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
             if self.isNixMode {
                 self.nixManagedBanner
             }
@@ -73,9 +74,13 @@ struct SettingsRootView: View {
                     .tag(SettingsTab.about)
             }
         }
+        }
+        .scrollIndicators(.automatic)
+        }
         .padding(.horizontal, 28)
         .padding(.vertical, 22)
-        .frame(width: SettingsTab.windowWidth, height: SettingsTab.windowHeight, alignment: .topLeading)
+        .frame(minWidth: SettingsTab.windowMinWidth, minHeight: SettingsTab.windowMinHeight, alignment: .topLeading)
+        // Allow window to be resizable; keep a reasonable minimum size via view constraints.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onReceive(NotificationCenter.default.publisher(for: .moltbotSelectSettingsTab)) { note in
             if let tab = note.object as? SettingsTab {
@@ -177,8 +182,10 @@ struct SettingsRootView: View {
 
 enum SettingsTab: CaseIterable {
     case general, channels, skills, sessions, cron, config, instances, voiceWake, permissions, debug, about
-    static let windowWidth: CGFloat = 824 // wider
-    static let windowHeight: CGFloat = 790 // +10% (more room)
+    static let windowWidth: CGFloat = 824
+    static let windowMinWidth: CGFloat = 720 // wider
+    static let windowHeight: CGFloat = 790
+    static let windowMinHeight: CGFloat = 620 // +10% (more room)
     var title: String {
         switch self {
         case .general: "General"
@@ -236,7 +243,7 @@ struct SettingsRootView_Previews: PreviewProvider {
         ForEach(SettingsTab.allCases, id: \.self) { tab in
             SettingsRootView(state: .preview, updater: DisabledUpdaterController(), initialTab: tab)
                 .previewDisplayName(tab.title)
-                .frame(width: SettingsTab.windowWidth, height: SettingsTab.windowHeight)
+        // Allow window to be resizable; keep a reasonable minimum size via view constraints.
         }
     }
 }
