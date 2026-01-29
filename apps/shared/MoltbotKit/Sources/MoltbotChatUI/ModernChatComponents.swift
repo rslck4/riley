@@ -71,9 +71,8 @@ private struct ModernChatMessageContent: View {
             if !self.inlineToolResults.isEmpty {
                 ForEach(self.inlineToolResults.indices, id: \.self) { idx in
                     let toolResult = self.inlineToolResults[idx]
-                    let display = ToolDisplayRegistry.resolve(name: toolResult.name ?? "tool", args: nil)
                     ToolResultCard(
-                        title: "\(display.emoji) \(display.title)",
+                        title: "🔧 \(toolResult.name ?? "tool")",
                         text: toolResult.text ?? "",
                         isUser: self.isUser)
                 }
@@ -123,13 +122,11 @@ private struct ModernChatMessageContent: View {
     }
 
     private var isToolResultMessage: Bool {
-        self.message.role.lowercased() == "tool"
+        (self.message.role.lowercased() == "toolresult" || self.message.role.lowercased() == "tool_result")
     }
 
     private var toolResultTitle: String {
-        let toolName = self.message.name ?? "Tool"
-        let display = ToolDisplayRegistry.resolve(name: toolName, args: nil)
-        return "\(display.emoji) \(display.title)"
+        "🔧 \(self.message.toolName ?? "Tool")"
     }
 }
 
