@@ -76,7 +76,6 @@ struct SettingsRootView: View {
         }
         }
         .scrollIndicators(.automatic)
-        }
         .padding(.horizontal, 28)
         .padding(.vertical, 22)
         .frame(minWidth: SettingsTab.windowMinWidth, minHeight: SettingsTab.windowMinHeight, alignment: .topLeading)
