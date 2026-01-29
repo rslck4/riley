@@ -162,10 +162,18 @@ public actor GatewayNodeSession {
         }
 
         let params = try self.decodeParamsJSON(paramsJSON)
-        return try await channel.request(
-            method: method,
-            params: params,
-            timeoutMs: Double(timeoutSeconds * 1000))
+        do {
+            self.logger.info("gateway request -> start method=\(method, privacy: .public) timeoutSeconds=\(timeoutSeconds, privacy: .public)")
+            let data = try await channel.request(
+                method: method,
+                params: params,
+                timeoutMs: Double(timeoutSeconds * 1000))
+            self.logger.info("gateway request -> ok method=\(method, privacy: .public) bytes=\(data.count, privacy: .public)")
+            return data
+        } catch {
+            self.logger.error("gateway request -> fail method=\(method, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            throw error
+        }
     }
 
     public func subscribeServerEvents(bufferingNewest: Int = 200) -> AsyncStream<EventFrame> {
