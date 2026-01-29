@@ -595,7 +595,7 @@ private struct TypingDots: View {
     }
 }
 
-private struct ChatAssistantTextBody: View {
+struct ChatAssistantTextBody: View {
     let text: String
     let markdownVariant: ChatMarkdownVariant
 
