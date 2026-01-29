@@ -221,6 +221,9 @@ public actor GatewayChannelActor {
         self.isConnecting = true
         defer { self.isConnecting = false }
 
+        // DEBUG: Log the exact URL being used
+        self.logger.info("gateway connect attempt url=\(self.url.absoluteString, privacy: .public)")
+
         self.task?.cancel(with: .goingAway, reason: nil)
         self.task = self.session.makeWebSocketTask(url: self.url)
         self.task?.resume()
@@ -235,6 +238,11 @@ public actor GatewayChannelActor {
                 },
                 operation: { try await self.sendConnect() })
         } catch {
+            let ns = error as NSError
+            self.logger.error("gateway ws connect raw error domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) desc=\(ns.localizedDescription, privacy: .public)")
+            if let urlError = error as? URLError {
+                self.logger.error("gateway ws connect urlError code=\(urlError.errorCode, privacy: .public) desc=\(urlError.localizedDescription, privacy: .public)")
+            }
             let wrapped = self.wrap(error, context: "connect to gateway @ \(self.url.absoluteString)")
             self.connected = false
             self.task?.cancel(with: .goingAway, reason: nil)
@@ -321,7 +329,7 @@ public actor GatewayChannelActor {
             authSource = .none
         }
         self.lastAuthSource = authSource
-        self.logger.info("gateway connect auth=\(authSource.rawValue, privacy: .public)")
+        self.logger.info("gateway connect auth=\(authSource.rawValue, privacy: .public) storedToken=\(storedToken != nil, privacy: .public) sharedToken=\(self.token != nil, privacy: .public) url=\(self.url.absoluteString, privacy: .public)")
         let canFallbackToShared = storedToken != nil && self.token != nil
         if let authToken {
             params["auth"] = ProtoAnyCodable(["token": ProtoAnyCodable(authToken)])
