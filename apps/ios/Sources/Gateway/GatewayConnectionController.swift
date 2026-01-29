@@ -75,11 +75,16 @@ final class GatewayConnectionController {
         let token = GatewaySettingsStore.loadGatewayToken(instanceId: instanceId)
         let password = GatewaySettingsStore.loadGatewayPassword(instanceId: instanceId)
         let stableID = self.manualStableID(host: host, port: port)
-        let tlsParams = self.resolveManualTLSParams(stableID: stableID, tlsEnabled: useTLS)
+        
+        let tlsParams = self.resolveManualTLSParams(stableID: stableID, tlsEnabled: useTLS, host: host)
+        print("DEBUG: connectManual host=\(host) stableID=\(stableID) useTLS=\(useTLS) tlsParams=\(String(describing: tlsParams))")
+        
+        // For Tailscale, tlsParams may be nil (no pinning) but we still want wss://
+        let effectiveUseTLS = useTLS || tlsParams?.required == true
         guard let url = self.buildGatewayURL(
             host: host,
             port: port,
-            useTLS: tlsParams?.required == true)
+            useTLS: effectiveUseTLS)
         else { return }
         self.didAutoConnect = true
         self.startAutoConnect(
@@ -138,12 +143,15 @@ final class GatewayConnectionController {
             let manualTLS = defaults.bool(forKey: "gateway.manual.tls")
 
             let stableID = self.manualStableID(host: manualHost, port: resolvedPort)
-            let tlsParams = self.resolveManualTLSParams(stableID: stableID, tlsEnabled: manualTLS)
+            let tlsParams = self.resolveManualTLSParams(stableID: stableID, tlsEnabled: manualTLS, host: manualHost)
+            print("DEBUG: maybeAutoConnect host=\(manualHost) stableID=\(stableID) manualTLS=\(manualTLS) tlsParams=\(String(describing: tlsParams))")
 
+            // For Tailscale, tlsParams may be nil (no pinning) but we still want wss://
+            let effectiveUseTLS = manualTLS || tlsParams?.required == true
             guard let url = self.buildGatewayURL(
                 host: manualHost,
                 port: resolvedPort,
-                useTLS: tlsParams?.required == true)
+                useTLS: effectiveUseTLS)
             else { return }
 
             self.didAutoConnect = true
@@ -237,7 +245,15 @@ final class GatewayConnectionController {
         return nil
     }
 
-    private func resolveManualTLSParams(stableID: String, tlsEnabled: Bool) -> GatewayTLSParams? {
+    private func resolveManualTLSParams(stableID: String, tlsEnabled: Bool, host: String? = nil) -> GatewayTLSParams? {
+        // For Tailscale connections, use standard TLS validation (no pinning)
+        // Tailscale Serve uses Let's Encrypt certificates that will validate normally
+        if let host = host, host.contains(".ts.net") {
+            print("DEBUG: Tailscale connection detected, skipping TLS pinning for \(host)")
+            // Return nil to use standard URLSession (no custom TLS session)
+            return nil
+        }
+        
         let stored = GatewayTLSStore.loadFingerprint(stableID: stableID)
         if tlsEnabled || stored != nil {
             return GatewayTLSParams(
@@ -278,13 +294,13 @@ final class GatewayConnectionController {
         let displayName = self.resolvedDisplayName(defaults: defaults)
 
         return GatewayConnectOptions(
-            role: "node",
-            scopes: [],
-            caps: self.currentCaps(),
-            commands: self.currentCommands(),
+            role: "operator",
+            scopes: ["operator.admin", "operator.approvals", "operator.pairing"],
+            caps: [],
+            commands: [],
             permissions: [:],
-            clientId: "moltbot-ios",
-            clientMode: "node",
+            clientId: "clawdbot-ios",
+            clientMode: "ui",
             clientDisplayName: displayName)
     }
 
