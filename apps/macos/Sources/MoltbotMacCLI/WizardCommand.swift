@@ -253,7 +253,7 @@ actor GatewayWizardClient {
         }
         let osVersion = ProcessInfo.processInfo.operatingSystemVersion
         let platform = "macos \(osVersion.majorVersion).\(osVersion.minorVersion).\(osVersion.patchVersion)"
-        let clientId = "moltbot-macos"
+        let clientId = "clawdbot-macos"
         let clientMode = "ui"
         let role = "operator"
         let scopes: [String] = []

@@ -13,7 +13,7 @@ struct ConnectOptions {
     var timeoutMs: Int = 15000
     var json: Bool = false
     var probe: Bool = false
-    var clientId: String = "moltbot-macos"
+    var clientId: String = "clawdbot-macos"
     var clientMode: String = "ui"
     var displayName: String?
     var role: String = "operator"
