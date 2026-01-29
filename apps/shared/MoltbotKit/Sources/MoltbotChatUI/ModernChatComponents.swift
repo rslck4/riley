@@ -15,16 +15,120 @@ struct ModernChatMessageCard: View {
 
     var body: some View {
         ModernChatCardContainer(isUser: self.isUser, userAccent: self.userAccent) {
-            ChatMessageBody(
+            ModernChatMessageContent(
                 message: self.message,
                 isUser: self.isUser,
                 style: self.style,
                 markdownVariant: self.markdownVariant,
-                userAccent: self.userAccent)
-        }
-        .frame(maxWidth: ChatUIConstants.bubbleMaxWidth, alignment: self.isUser ? .trailing : .leading)
+                userAccent: self.userAccent                userAccent: selfdth: 760, alignment: self.isUser ? .trailing : .leading)
         .frame(maxWidth: .infinity, alignment: self.isUser ? .trailing : .leading)
         .padding(.horizontal, 2)
+    }
+}
+
+@MainActor
+private struct ModernChatMessageContent: View {
+    let message: MoltbotChatMessage
+    let isUser: Bool
+    let style: MoltbotChatView.Style
+    let markdownVariant: ChatMarkdownVariant
+    let userAccent: Color?
+
+    var body: some View {
+        let text = self.primaryText
+        let textColor = self.isUser ? MoltbotChatTheme.userText : MoltbotChatTheme.assistantText
+
+        VStack(alignment: .leading, spacing: 10) {
+            if self.isToolResultMessage {
+                if !text.isEmpty {
+                    ToolResultCard(title: self.toolResultTitle, text: text, isUser: self.isUser)
+                }
+            } else if self.isUser {
+                ChatMarkdownRenderer(
+                    text: text,
+                    context: .user,
+                    variant: self.markdownVariant,
+                    font: .system(size: 14),
+                    textColor: textColor)
+            } else {
+                ChatAssistantTextBody(text: text, markdownVariant: self.markdownVariant)
+            }
+
+            if !self.inlineAttachments.isEmpty {
+                ForEach(self.inlineAttachments.indices, id: \.self) { idx in
+                    AttachmentRow(att: self.inlineAttachments[idx], isUser: self.isUser)
+                }
+            }
+
+            if !self.toolCalls.isEmpty {
+                ForEach(self.toolCalls.indices, id: \.self) { idx in
+                    ToolCallCard(content: self.toolCalls[idx], isUser: self.isUser)
+                }
+            }
+
+            if !self.inlineToolResults.isEmpty {
+                ForEach(self.inlineToolResults.indices, id: \.self) { idx in
+                    let toolResult = self.inlineToolResults[idx]
+                    let display = ToolDisplayRegistry.resolve(name: toolResult.name ?? "tool", args: nil)
+                    ToolResultCard(
+                        title: "\(display.emoji) \(display.title)",
+                        text: toolResult.text ?? "",
+                        isUser: self.isUser)
+                }
+            }
+        }
+        .textSelection(.enabled)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .foregroundStyle(textColor)
+    }
+
+    private var primaryText: String {
+        let parts = self.message.content.compactMap { content -> String? in
+            let kind = (content.type ?? "text").lowercased()
+            guard kind == "text" || kind.isEmpty else { return nil }
+            return content.text
+        }
+        return parts.joined(separator: "
+").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var inlineAttachments: [MoltbotChatMessageContent] {
+        self.message.content.filter { content in
+            switch content.type ?? "text" {
+            case "file", "attachment":
+                true
+            default:
+                false
+            }
+        }
+    }
+
+    private var toolCalls: [MoltbotChatMessageContent] {
+        self.message.content.filter { content in
+            let kind = (content.type ?? "").lowercased()
+            if ["toolcall", "tool_call", "tooluse", "tool_use"].contains(kind) {
+                return true
+            }
+            return content.name != nil && content.arguments != nil
+        }
+    }
+
+    private var inlineToolResults: [MoltbotChatMessageContent] {
+        self.message.content.filter { content in
+            let kind = (content.type ?? "").lowercased()
+            return kind == "toolresult" || kind == "tool_result"
+        }
+    }
+
+    private var isToolResultMessage: Bool {
+        self.message.role.lowercased() == "tool"
+    }
+
+    private var toolResultTitle: String {
+        let toolName = self.message.name ?? "Tool"
+        let display = ToolDisplayRegistry.resolve(name: toolName, args: nil)
+        return "\(display.emoji) \(display.title)"
     }
 }
 
