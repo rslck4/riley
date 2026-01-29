@@ -2,7 +2,7 @@ import MoltbotKit
 import Foundation
 import SwiftUI
 
-private enum ChatUIConstants {
+enum ChatUIConstants {
     static let bubbleMaxWidth: CGFloat = 560
     static let bubbleCorner: CGFloat = 18
 }
@@ -156,7 +156,7 @@ struct ChatMessageBubble: View {
 }
 
 @MainActor
-private struct ChatMessageBody: View {
+struct ChatMessageBody: View {
     let message: MoltbotChatMessage
     let isUser: Bool
     let style: MoltbotChatView.Style
