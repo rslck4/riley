@@ -142,14 +142,6 @@ public actor GatewayNodeSession {
 
     public func sendEvent(event: String, payloadJSON: String?) async {
         guard let channel = self.channel else { return }
-
-        let role = self.currentRole()
-        // Events are a node/bridge pathway on the gateway. Operator clients should not use node.event.
-        if role != "node" {
-            self.logger.warning("sendEvent ignored for role=\(role, privacy: .public) event=\(event, privacy: .public)")
-            return
-        }
-
         let params: [String: AnyCodable] = [
             "event": AnyCodable(event),
             "payloadJSON": AnyCodable(payloadJSON ?? NSNull()),
@@ -160,6 +152,7 @@ public actor GatewayNodeSession {
             self.logger.error("node event failed: \(error.localizedDescription, privacy: .public)")
         }
     }
+
 
     public func request(method: String, paramsJSON: String?, timeoutSeconds: Int = 15) async throws -> Data {
         guard let channel = self.channel else {
