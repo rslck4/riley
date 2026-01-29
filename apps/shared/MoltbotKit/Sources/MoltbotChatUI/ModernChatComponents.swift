@@ -1,4 +1,5 @@
 import SwiftUI
+import MoltbotKit
 
 // MARK: - Modern (2026) chat components
 // This file intentionally keeps the existing data model and feature surface.
@@ -72,7 +73,7 @@ private struct ModernChatMessageContent: View {
                 ForEach(self.inlineToolResults.indices, id: \.self) { idx in
                     let toolResult = self.inlineToolResults[idx]
                     ToolResultCard(
-                        title: "🔧 \(toolResult.name ?? "tool")",
+                        title: "🔧 \(toolResult.name ?? \"tool\")",
                         text: toolResult.text ?? "",
                         isUser: self.isUser)
                 }
@@ -122,11 +123,17 @@ private struct ModernChatMessageContent: View {
     }
 
     private var isToolResultMessage: Bool {
-        (self.message.role.lowercased() == "toolresult" || self.message.role.lowercased() == "tool_result")
+        let role = self.message.role.lowercased()
+        return role == "toolresult" || role == "tool_result"
     }
 
     private var toolResultTitle: String {
-        "🔧 \(self.message.toolName ?? "Tool")"
+        if let name = self.message.toolName, !name.isEmpty {
+            let display = ToolDisplayRegistry.resolve(name: name, args: nil)
+            return "\(display.emoji) \(display.title)"
+        }
+        let display = ToolDisplayRegistry.resolve(name: "tool", args: nil)
+        return "\(display.emoji) \(display.title)"
     }
 }
 

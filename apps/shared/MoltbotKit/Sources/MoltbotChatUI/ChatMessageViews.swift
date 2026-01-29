@@ -338,7 +338,7 @@ struct ChatMessageBody: View {
     }
 }
 
-private struct AttachmentRow: View {
+struct AttachmentRow: View {
     let att: MoltbotChatMessageContent
     let isUser: Bool
 
@@ -357,7 +357,7 @@ private struct AttachmentRow: View {
     }
 }
 
-private struct ToolCallCard: View {
+struct ToolCallCard: View {
     let content: MoltbotChatMessageContent
     let isUser: Bool
 
@@ -398,7 +398,7 @@ private struct ToolCallCard: View {
     }
 }
 
-private struct ToolResultCard: View {
+struct ToolResultCard: View {
     let title: String
     let text: String
     let isUser: Bool
