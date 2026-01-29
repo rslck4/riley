@@ -80,7 +80,9 @@ final class GatewayConnectionController {
         print("DEBUG: connectManual host=\(host) stableID=\(stableID) useTLS=\(useTLS) tlsParams=\(String(describing: tlsParams))")
         
         // For Tailscale, tlsParams may be nil (no pinning) but we still want wss://
-        let effectiveUseTLS = useTLS || tlsParams?.required == true
+        // Force TLS for Tailscale Serve endpoints (.ts.net). ATS blocks ws:// and Serve is HTTPS/WSS on 443.
+        let isTailscaleHost = host.contains(".ts.net")
+        let effectiveUseTLS = isTailscaleHost || useTLS || tlsParams?.required == true
         guard let url = self.buildGatewayURL(
             host: host,
             port: port,
@@ -147,7 +149,9 @@ final class GatewayConnectionController {
             print("DEBUG: maybeAutoConnect host=\(manualHost) stableID=\(stableID) manualTLS=\(manualTLS) tlsParams=\(String(describing: tlsParams))")
 
             // For Tailscale, tlsParams may be nil (no pinning) but we still want wss://
-            let effectiveUseTLS = manualTLS || tlsParams?.required == true
+            // Force TLS for Tailscale Serve endpoints (.ts.net). ATS blocks ws:// and Serve is HTTPS/WSS on 443.
+            let isTailscaleHost = manualHost.contains(".ts.net")
+            let effectiveUseTLS = isTailscaleHost || manualTLS || tlsParams?.required == true
             guard let url = self.buildGatewayURL(
                 host: manualHost,
                 port: resolvedPort,
