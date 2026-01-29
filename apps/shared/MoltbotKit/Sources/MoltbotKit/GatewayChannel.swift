@@ -710,6 +710,7 @@ public actor GatewayChannelActor {
 
     private func timeoutRequest(id: String, timeoutMs: Double) async {
         guard let waiter = self.pending.removeValue(forKey: id) else { return }
+        self.logger.error("gateway request timeout id=\(id, privacy: .public) timeoutMs=\(Int(timeoutMs), privacy: .public)")
         let err = NSError(
             domain: "Gateway",
             code: 5,
