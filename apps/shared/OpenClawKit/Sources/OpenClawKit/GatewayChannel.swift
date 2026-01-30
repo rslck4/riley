@@ -274,7 +274,7 @@ public actor GatewayChannelActor {
             caps: [],
             commands: [],
             permissions: [:],
-            clientId: "clawdbot-macos",
+            clientId: "openclaw-macos",
             clientMode: "ui",
             clientDisplayName: InstanceIdentity.displayName)
         let clientDisplayName = options.clientDisplayName ?? InstanceIdentity.displayName
