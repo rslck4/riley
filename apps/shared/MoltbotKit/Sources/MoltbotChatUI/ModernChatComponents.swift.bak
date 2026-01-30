@@ -1,0 +1,924 @@
+import SwiftUI
+import MoltbotKit
+
+// MARK: - Modern (2026) chat components
+// Designed to feel like Claude/ChatGPT desktop apps:
+// - Clean message cards (content-first, no bubbles)
+// - Inline collapsible tool activity
+// - Copy buttons on messages and code blocks
+// - Better scroll anchoring
+
+// MARK: - Preferences
+
+enum ModernChatPreferences {
+    @MainActor
+    static var isModernUIEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "chat.modernUI.enabled") }
+        set { UserDefaults.standard.set(newValue, forKey: "chat.modernUI.enabled") }
+    }
+}
+
+// MARK: - Main Message Card
+
+@MainActor
+struct ModernChatMessageCard: View {
+    let message: MoltbotChatMessage
+    let style: MoltbotChatView.Style
+    let markdownVariant: ChatMarkdownVariant
+    let userAccent: Color?
+
+    @State private var isHovered = false
+
+    private var isUser: Bool { self.message.role.lowercased() == "user" }
+
+    var body: some View {
+        VStack(alignment: self.isUser ? .trailing : .leading, spacing: 0) {
+            // Role label (for assistant only)
+            if !self.isUser {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Text("Assistant")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
+            }
+
+            // Message content
+            ModernChatCardContainer(isUser: self.isUser, userAccent: self.userAccent, isHovered: self.isHovered) {
+                ModernChatMessageContent(
+                    message: self.message,
+                    isUser: self.isUser,
+                    style: self.style,
+                    markdownVariant: self.markdownVariant,
+                    userAccent: self.userAccent)
+            }
+            .overlay(alignment: self.isUser ? .topLeading : .topTrailing) {
+                if self.isHovered && !self.isUser {
+                    ModernMessageActions(message: self.message)
+                        .offset(x: self.isUser ? -8 : 8, y: -8)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+            }
+        }
+        .frame(maxWidth: 760, alignment: self.isUser ? .trailing : .leading)
+        .frame(maxWidth: .infinity, alignment: self.isUser ? .trailing : .leading)
+        .padding(.horizontal, 4)
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                self.isHovered = hovering
+            }
+        }
+    }
+}
+
+// MARK: - Canvas Action Delegate
+
+/// Protocol for handling "Send to Canvas" actions from chat messages
+@MainActor
+public protocol ModernChatCanvasDelegate: AnyObject {
+    func sendToCanvas(content: String, filename: String?) async
+    var canvasAvailable: Bool { get }
+}
+
+/// Global canvas delegate - set by the app layer
+@MainActor
+public enum ModernChatCanvasSupport {
+    public static weak var delegate: ModernChatCanvasDelegate?
+}
+
+// MARK: - Message Actions (Copy, Send to Canvas)
+
+@MainActor
+private struct ModernMessageActions: View {
+    let message: MoltbotChatMessage
+    @State private var copied = false
+    @State private var sentToCanvas = false
+
+    private var hasCodeBlocks: Bool {
+        self.messageText.contains("```")
+    }
+
+    private var messageText: String {
+        self.message.content
+            .compactMap { content -> String? in
+                let kind = (content.type ?? "text").lowercased()
+                guard kind == "text" || kind.isEmpty else { return nil }
+                return content.text
+            }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            // Copy button
+            Button {
+                self.copyMessage()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: self.copied ? "checkmark" : "doc.on.doc")
+                        .font(.caption2.weight(.medium))
+                    if self.copied {
+                        Text("Copied")
+                            .font(.caption2.weight(.medium))
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help("Copy message")
+
+            // Send to Canvas button (only if canvas is available and has code)
+            #if os(macOS)
+            if self.hasCodeBlocks, ModernChatCanvasSupport.delegate?.canvasAvailable == true {
+                Button {
+                    self.sendToCanvas()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: self.sentToCanvas ? "checkmark" : "rectangle.on.rectangle")
+                            .font(.caption2.weight(.medium))
+                        if self.sentToCanvas {
+                            Text("Sent")
+                                .font(.caption2.weight(.medium))
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .help("Send to Canvas")
+            }
+            #endif
+        }
+    }
+
+    private func copyMessage() {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(self.messageText, forType: .string)
+        #else
+        UIPasteboard.general.string = self.messageText
+        #endif
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            self.copied = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation {
+                self.copied = false
+            }
+        }
+    }
+
+    private func sendToCanvas() {
+        Task {
+            await ModernChatCanvasSupport.delegate?.sendToCanvas(
+                content: self.messageText,
+                filename: nil)
+
+            await MainActor.run {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    self.sentToCanvas = true
+                }
+            }
+
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+            await MainActor.run {
+                withAnimation {
+                    self.sentToCanvas = false
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Message Content
+
+@MainActor
+private struct ModernChatMessageContent: View {
+    let message: MoltbotChatMessage
+    let isUser: Bool
+    let style: MoltbotChatView.Style
+    let markdownVariant: ChatMarkdownVariant
+    let userAccent: Color?
+
+    var body: some View {
+        let text = self.primaryText
+        let textColor = self.isUser ? MoltbotChatTheme.userText : MoltbotChatTheme.assistantText
+
+        VStack(alignment: .leading, spacing: 12) {
+            if self.isToolResultMessage {
+                if !text.isEmpty {
+                    ModernToolResultCard(title: self.toolResultTitle, text: text, isUser: self.isUser)
+                }
+            } else if self.isUser {
+                ChatMarkdownRenderer(
+                    text: text,
+                    context: .user,
+                    variant: self.markdownVariant,
+                    font: .system(size: 14),
+                    textColor: textColor)
+            } else {
+                ModernAssistantTextBody(text: text, markdownVariant: self.markdownVariant)
+            }
+
+            if !self.inlineAttachments.isEmpty {
+                ForEach(self.inlineAttachments.indices, id: \.self) { idx in
+                    ModernAttachmentRow(att: self.inlineAttachments[idx], isUser: self.isUser)
+                }
+            }
+
+            if !self.toolCalls.isEmpty {
+                ModernToolCallsGroup(toolCalls: self.toolCalls, isUser: self.isUser)
+            }
+
+            if !self.inlineToolResults.isEmpty {
+                ForEach(self.inlineToolResults.indices, id: \.self) { idx in
+                    let toolResult = self.inlineToolResults[idx]
+                    let toolName = toolResult.name ?? "tool"
+                    ModernToolResultCard(
+                        title: "🔧 \(toolName)",
+                        text: toolResult.text ?? "",
+                        isUser: self.isUser)
+                }
+            }
+        }
+        .textSelection(.enabled)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .foregroundStyle(textColor)
+    }
+
+    private var primaryText: String {
+        let parts = self.message.content.compactMap { content -> String? in
+            let kind = (content.type ?? "text").lowercased()
+            guard kind == "text" || kind.isEmpty else { return nil }
+            return content.text
+        }
+        return parts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var inlineAttachments: [MoltbotChatMessageContent] {
+        self.message.content.filter { content in
+            switch content.type ?? "text" {
+            case "file", "attachment":
+                true
+            default:
+                false
+            }
+        }
+    }
+
+    private var toolCalls: [MoltbotChatMessageContent] {
+        self.message.content.filter { content in
+            let kind = (content.type ?? "").lowercased()
+            if ["toolcall", "tool_call", "tooluse", "tool_use"].contains(kind) {
+                return true
+            }
+            return content.name != nil && content.arguments != nil
+        }
+    }
+
+    private var inlineToolResults: [MoltbotChatMessageContent] {
+        self.message.content.filter { content in
+            let kind = (content.type ?? "").lowercased()
+            return kind == "toolresult" || kind == "tool_result"
+        }
+    }
+
+    private var isToolResultMessage: Bool {
+        let role = self.message.role.lowercased()
+        return role == "toolresult" || role == "tool_result"
+    }
+
+    private var toolResultTitle: String {
+        if let name = self.message.toolName, !name.isEmpty {
+            let display = ToolDisplayRegistry.resolve(name: name, args: nil)
+            return "\(display.emoji) \(display.title)"
+        }
+        let display = ToolDisplayRegistry.resolve(name: "tool", args: nil)
+        return "\(display.emoji) \(display.title)"
+    }
+}
+
+// MARK: - Assistant Text Body with Code Block Support
+
+@MainActor
+struct ModernAssistantTextBody: View {
+    let text: String
+    let markdownVariant: ChatMarkdownVariant
+
+    var body: some View {
+        let segments = AssistantTextParser.segments(from: self.text)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(segments) { segment in
+                if segment.kind == .thinking {
+                    ModernThinkingBlock(text: segment.text)
+                } else {
+                    // Check for code blocks within the text
+                    ModernTextWithCodeBlocks(
+                        text: segment.text,
+                        markdownVariant: self.markdownVariant)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Text with Code Blocks (handles ``` blocks)
+
+@MainActor
+private struct ModernTextWithCodeBlocks: View {
+    let text: String
+    let markdownVariant: ChatMarkdownVariant
+
+    var body: some View {
+        let blocks = self.parseBlocks()
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(blocks.indices, id: \.self) { idx in
+                let block = blocks[idx]
+                switch block {
+                case .text(let content):
+                    if !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        ChatMarkdownRenderer(
+                            text: content,
+                            context: .assistant,
+                            variant: self.markdownVariant,
+                            font: .system(size: 14),
+                            textColor: MoltbotChatTheme.assistantText)
+                    }
+                case .code(let language, let content):
+                    ModernCodeBlock(language: language, code: content)
+                }
+            }
+        }
+    }
+
+    private enum ContentBlock {
+        case text(String)
+        case code(language: String?, code: String)
+    }
+
+    private func parseBlocks() -> [ContentBlock] {
+        var blocks: [ContentBlock] = []
+        var remaining = self.text[...]
+        let codePattern = /```(\w*)\n([\s\S]*?)```/
+
+        while let match = remaining.firstMatch(of: codePattern) {
+            // Text before the code block
+            let beforeRange = remaining.startIndex..<match.range.lowerBound
+            let before = String(remaining[beforeRange])
+            if !before.isEmpty {
+                blocks.append(.text(before))
+            }
+
+            // The code block
+            let language = match.output.1.isEmpty ? nil : String(match.output.1)
+            let code = String(match.output.2)
+            blocks.append(.code(language: language, code: code))
+
+            remaining = remaining[match.range.upperBound...]
+        }
+
+        // Remaining text after last code block
+        let remainingText = String(remaining)
+        if !remainingText.isEmpty {
+            blocks.append(.text(remainingText))
+        }
+
+        return blocks
+    }
+}
+
+// MARK: - Modern Code Block with Copy Button
+
+@MainActor
+struct ModernCodeBlock: View {
+    let language: String?
+    let code: String
+    @State private var copied = false
+    @State private var isHovered = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header with language and copy button
+            HStack {
+                Text(self.displayLanguage)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button {
+                    self.copyCode()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: self.copied ? "checkmark" : "doc.on.doc")
+                            .font(.caption2)
+                        Text(self.copied ? "Copied!" : "Copy")
+                            .font(.caption2)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.white.opacity(self.isHovered ? 0.15 : 0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .onHover { self.isHovered = $0 }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.3))
+
+            // Code content
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(self.code.trimmingCharacters(in: .whitespacesAndNewlines))
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .textSelection(.enabled)
+                    .padding(12)
+            }
+        }
+        .background(Color(white: 0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var displayLanguage: String {
+        guard let lang = self.language, !lang.isEmpty else { return "code" }
+        return lang.lowercased()
+    }
+
+    private func copyCode() {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(self.code, forType: .string)
+        #else
+        UIPasteboard.general.string = self.code
+        #endif
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            self.copied = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation {
+                self.copied = false
+            }
+        }
+    }
+}
+
+// MARK: - Thinking Block (collapsible)
+
+@MainActor
+private struct ModernThinkingBlock: View {
+    let text: String
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    self.expanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: self.expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+                    Image(systemName: "brain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("Thinking")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if self.expanded {
+                Text(self.text)
+                    .font(.system(size: 13).italic())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+            }
+        }
+        .background(Color.black.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+// MARK: - Tool Activity Row (collapsible)
+
+@MainActor
+struct ModernChatActivityRow: View {
+    let title: String
+    let subtitle: String
+    let details: String
+
+    @State private var expanded: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    self.expanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: self.expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+
+                    ProgressView()
+                        .controlSize(.mini)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(self.title)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(.primary)
+                        Text(self.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("\(self.title). \(self.subtitle)"))
+
+            if self.expanded {
+                Text(self.details)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black.opacity(0.06))
+            }
+        }
+        .background(Color.black.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Tool Calls Group (collapsible)
+
+@MainActor
+private struct ModernToolCallsGroup: View {
+    let toolCalls: [MoltbotChatMessageContent]
+    let isUser: Bool
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    self.expanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: self.expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+
+                    Image(systemName: "hammer")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text(self.summaryText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if self.expanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(self.toolCalls.indices, id: \.self) { idx in
+                        ModernToolCallDetail(content: self.toolCalls[idx], isUser: self.isUser)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 10)
+            }
+        }
+        .background(Color.black.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var summaryText: String {
+        let count = self.toolCalls.count
+        if count == 1 {
+            let name = self.toolCalls[0].name ?? "tool"
+            let display = ToolDisplayRegistry.resolve(name: name, args: self.toolCalls[0].arguments)
+            return "\(display.emoji) \(display.title)"
+        }
+        return "Used \(count) tools"
+    }
+}
+
+@MainActor
+private struct ModernToolCallDetail: View {
+    let content: MoltbotChatMessageContent
+    let isUser: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(self.toolName)
+                    .font(.caption.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+
+            if let summary = self.summary, !summary.isEmpty {
+                Text(summary)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(10)
+        .background(Color.black.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var toolName: String {
+        "\(self.display.emoji) \(self.display.title)"
+    }
+
+    private var summary: String? {
+        self.display.detailLine
+    }
+
+    private var display: ToolDisplaySummary {
+        ToolDisplayRegistry.resolve(name: self.content.name ?? "tool", args: self.content.arguments)
+    }
+}
+
+// MARK: - Tool Result Card (collapsible)
+
+@MainActor
+struct ModernToolResultCard: View {
+    let title: String
+    let text: String
+    let isUser: Bool
+    @State private var expanded = false
+    @State private var copied = false
+
+    private static let previewLineLimit = 6
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            Button {
+                withAnimation(.snappy(duration: 0.2)) {
+                    self.expanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: self.expanded ? "chevron.down" : "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 12)
+
+                    Text(self.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    if self.expanded {
+                        Button {
+                            self.copyResult()
+                        } label: {
+                            Image(systemName: self.copied ? "checkmark" : "doc.on.doc")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            // Content
+            if self.expanded || self.shouldShowPreview {
+                Text(self.displayText)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(self.isUser ? MoltbotChatTheme.userText.opacity(0.8) : MoltbotChatTheme.assistantText.opacity(0.8))
+                    .lineLimit(self.expanded ? nil : Self.previewLineLimit)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
+            }
+        }
+        .background(Color.black.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var lines: [Substring] {
+        self.text.components(separatedBy: .newlines).map { Substring($0) }
+    }
+
+    private var displayText: String {
+        guard !self.expanded, self.lines.count > Self.previewLineLimit else { return self.text }
+        return self.lines.prefix(Self.previewLineLimit).joined(separator: "\n") + "\n…"
+    }
+
+    private var shouldShowPreview: Bool {
+        !self.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func copyResult() {
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(self.text, forType: .string)
+        #else
+        UIPasteboard.general.string = self.text
+        #endif
+
+        withAnimation {
+            self.copied = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            withAnimation {
+                self.copied = false
+            }
+        }
+    }
+}
+
+// MARK: - Modern Attachment Row
+
+@MainActor
+private struct ModernAttachmentRow: View {
+    let att: MoltbotChatMessageContent
+    let isUser: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: self.iconName)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(self.att.fileName ?? "Attachment")
+                    .font(.callout)
+                    .lineLimit(1)
+                if let mimeType = self.att.mimeType {
+                    Text(mimeType)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(Color.black.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var iconName: String {
+        guard let mime = self.att.mimeType?.lowercased() else { return "paperclip" }
+        if mime.hasPrefix("image/") { return "photo" }
+        if mime.hasPrefix("video/") { return "video" }
+        if mime.hasPrefix("audio/") { return "waveform" }
+        if mime.contains("pdf") { return "doc.text" }
+        return "paperclip"
+    }
+}
+
+// MARK: - Card Container
+
+@MainActor
+private struct ModernChatCardContainer<Content: View>: View {
+    let isUser: Bool
+    let userAccent: Color?
+    let isHovered: Bool
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        content
+            .background(self.background)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(self.borderColor, lineWidth: 1)
+            )
+            .shadow(color: self.shadowColor, radius: self.shadowRadius, y: 2)
+    }
+
+    private var background: some View {
+        Group {
+            if self.isUser {
+                (self.userAccent ?? MoltbotChatTheme.userBubble)
+                    .opacity(0.95)
+            } else {
+                #if os(macOS)
+                Color(nsColor: .textBackgroundColor).opacity(0.6)
+                #else
+                Color(uiColor: .secondarySystemBackground).opacity(0.8)
+                #endif
+            }
+        }
+    }
+
+    private var borderColor: Color {
+        if self.isUser {
+            return Color.white.opacity(0.15)
+        }
+        return Color.white.opacity(self.isHovered ? 0.12 : 0.06)
+    }
+
+    private var shadowColor: Color {
+        self.isHovered ? Color.black.opacity(0.08) : Color.clear
+    }
+
+    private var shadowRadius: CGFloat {
+        self.isHovered ? 8 : 0
+    }
+}
+
+// MARK: - Modern Streaming Bubble
+
+@MainActor
+struct ModernStreamingAssistantCard: View {
+    let text: String
+    let markdownVariant: ChatMarkdownVariant
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Text("Assistant")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 6)
+
+            VStack(alignment: .leading, spacing: 12) {
+                ModernAssistantTextBody(text: self.text, markdownVariant: self.markdownVariant)
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .background(
+                #if os(macOS)
+                Color(nsColor: .textBackgroundColor).opacity(0.6)
+                #else
+                Color(uiColor: .secondarySystemBackground).opacity(0.8)
+                #endif
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+            )
+        }
+        .frame(maxWidth: 760, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 4)
+    }
+}
