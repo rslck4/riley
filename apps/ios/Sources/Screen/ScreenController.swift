@@ -6,9 +6,19 @@ import WebKit
 @MainActor
 @Observable
 final class ScreenController {
-    let webView: WKWebView
-    private let navigationDelegate: ScreenNavigationDelegate
-    private let a2uiActionHandler: CanvasA2UIActionMessageHandler
+    private var _webView: WKWebView?
+    private var navigationDelegate: ScreenNavigationDelegate?
+    private var a2uiActionHandler: CanvasA2UIActionMessageHandler?
+
+    var webView: WKWebView {
+        if let existing = _webView { return existing }
+        let created = Self.createWebView(controller: self)
+        self._webView = created.webView
+        self.navigationDelegate = created.navigationDelegate
+        self.a2uiActionHandler = created.a2uiActionHandler
+        self.reload()
+        return created.webView
+    }
 
     var urlString: String = ""
     var errorText: String?
@@ -24,6 +34,14 @@ final class ScreenController {
     private var debugStatusSubtitle: String?
 
     init() {
+        // WebView creation is deferred until first access via the computed property.
+    }
+
+    private static func createWebView(controller: ScreenController) -> (
+        webView: WKWebView,
+        navigationDelegate: ScreenNavigationDelegate,
+        a2uiActionHandler: CanvasA2UIActionMessageHandler
+    ) {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         let a2uiActionHandler = CanvasA2UIActionMessageHandler()
@@ -32,22 +50,20 @@ final class ScreenController {
             userContentController.add(a2uiActionHandler, name: name)
         }
         config.userContentController = userContentController
-        self.navigationDelegate = ScreenNavigationDelegate()
-        self.a2uiActionHandler = a2uiActionHandler
-        self.webView = WKWebView(frame: .zero, configuration: config)
+        let navigationDelegate = ScreenNavigationDelegate()
+        let webView = WKWebView(frame: .zero, configuration: config)
         // Canvas scaffold is a fully self-contained HTML page; avoid relying on transparency underlays.
-        self.webView.isOpaque = true
-        self.webView.backgroundColor = .black
-        self.webView.scrollView.backgroundColor = .black
-        self.webView.scrollView.contentInsetAdjustmentBehavior = .never
-        self.webView.scrollView.contentInset = .zero
-        self.webView.scrollView.scrollIndicatorInsets = .zero
-        self.webView.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
-        self.applyScrollBehavior()
-        self.webView.navigationDelegate = self.navigationDelegate
-        self.navigationDelegate.controller = self
-        a2uiActionHandler.controller = self
-        self.reload()
+        webView.isOpaque = true
+        webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.contentInset = .zero
+        webView.scrollView.scrollIndicatorInsets = .zero
+        webView.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
+        webView.navigationDelegate = navigationDelegate
+        navigationDelegate.controller = controller
+        a2uiActionHandler.controller = controller
+        return (webView, navigationDelegate, a2uiActionHandler)
     }
 
     func navigate(to urlString: String) {
@@ -109,6 +125,7 @@ final class ScreenController {
     }
 
     fileprivate func applyDebugStatusIfNeeded() {
+        guard self._webView != nil else { return }
         let enabled = self.debugStatusEnabled
         let title = self.debugStatusTitle
         let subtitle = self.debugStatusSubtitle

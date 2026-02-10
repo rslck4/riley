@@ -254,6 +254,16 @@ struct OpenClawChatComposer: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, 4)
                 .focused(self.$isFocused)
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button {
+                            self.isFocused = false
+                        } label: {
+                            Image(systemName: "keyboard.chevron.compact.down")
+                        }
+                    }
+                }
             #endif
         }
     }

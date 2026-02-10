@@ -150,24 +150,46 @@ public final class OpenClawChatViewModel {
     // MARK: - Internals
 
     private func bootstrap() async {
+        chatUILogger.info("Bootstrap starting for session: \(self.sessionKey, privacy: .public)")
         self.isLoading = true
         self.errorText = nil
-        self.healthOK = false
+        self.healthOK = true // optimistic until a health poll proves otherwise
         self.clearPendingRuns(reason: nil)
         self.pendingToolCallsById = [:]
         self.streamingAssistantText = nil
         self.sessionId = nil
-        defer { self.isLoading = false }
+        defer { 
+            self.isLoading = false 
+            chatUILogger.info("Bootstrap completed, healthOK: \(self.healthOK)")
+        }
         do {
             do {
+                chatUILogger.debug("Setting active session key...")
                 try await self.transport.setActiveSessionKey(self.sessionKey)
+                chatUILogger.debug("Active session key set successfully")
             } catch {
                 // Best-effort only; history/send/health still work without push events.
+                chatUILogger.warning(
+                    "Failed to set active session key: \(error.localizedDescription, privacy: .public)"
+                )
             }
 
-            let payload = try await self.transport.requestHistory(sessionKey: self.sessionKey)
+            chatUILogger.info("Requesting chat history...")
+
+            // Guard against a hung request leaving the UI stuck forever.
+            let payload: OpenClawChatHistoryPayload = try await AsyncTimeout.withTimeout(
+                seconds: 15,
+                onTimeout: {
+                    NSError(domain: "Chat", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "chat history request timed out",
+                    ])
+                },
+                operation: { try await self.transport.requestHistory(sessionKey: self.sessionKey) })
+
             self.messages = Self.decodeMessages(payload.messages ?? [])
             self.sessionId = payload.sessionId
+            self.healthOK = true // history loaded, treat transport as usable
+            chatUILogger.info("Loaded \(self.messages.count) messages, sessionId: \(payload.sessionId ?? "nil", privacy: .public)")
             if let level = payload.thinkingLevel, !level.isEmpty {
                 self.thinkingLevel = level
             }
@@ -380,9 +402,12 @@ public final class OpenClawChatViewModel {
             // Keep multiple clients in sync: if another client finishes a run for our session, refresh history.
             switch chat.state {
             case "final", "aborted", "error":
-                self.streamingAssistantText = nil
                 self.pendingToolCallsById = [:]
-                Task { await self.refreshHistoryAfterRun() }
+                // Defer clearing streaming text until history loads to avoid a flicker.
+                Task {
+                    await self.refreshHistoryAfterRun()
+                    self.streamingAssistantText = nil
+                }
             default:
                 break
             }
@@ -400,27 +425,38 @@ public final class OpenClawChatViewModel {
                 self.clearPendingRuns(reason: nil)
             }
             self.pendingToolCallsById = [:]
-            self.streamingAssistantText = nil
-            Task { await self.refreshHistoryAfterRun() }
+            // Defer clearing streaming text until history loads to avoid a flicker.
+            Task {
+                await self.refreshHistoryAfterRun()
+                self.streamingAssistantText = nil
+            }
         default:
             break
         }
     }
 
     private func handleAgentEvent(_ evt: OpenClawAgentEventPayload) {
-        if let sessionId, evt.runId != sessionId {
+        // Check if this agent event is for one of our pending runs
+        // If we have a runId in the event, verify it's one we're tracking
+        let runId = evt.runId
+        guard self.pendingRuns.contains(runId) else {
+            chatUILogger.debug("Ignoring agent event for untracked runId: \(runId, privacy: .public)")
             return
         }
 
+        chatUILogger.debug("Processing agent event, stream: \(evt.stream, privacy: .public)")
+        
         switch evt.stream {
         case "assistant":
             if let text = evt.data["text"]?.value as? String {
                 self.streamingAssistantText = text
+                chatUILogger.debug("Updated streaming assistant text, length: \(text.count)")
             }
         case "tool":
             guard let phase = evt.data["phase"]?.value as? String else { return }
             guard let name = evt.data["name"]?.value as? String else { return }
             guard let toolCallId = evt.data["toolCallId"]?.value as? String else { return }
+            chatUILogger.debug("Tool event: \(name, privacy: .public) - \(phase, privacy: .public)")
             if phase == "start" {
                 let args = evt.data["args"]
                 self.pendingToolCallsById[toolCallId] = OpenClawChatPendingToolCall(
@@ -489,8 +525,16 @@ public final class OpenClawChatViewModel {
         do {
             let ok = try await self.transport.requestHealth(timeoutMs: 5000)
             self.healthOK = ok
+            chatUILogger.debug("Health check result: \(ok)")
         } catch {
-            self.healthOK = false
+            chatUILogger.warning("Health check failed: \(error.localizedDescription, privacy: .public)")
+            // If we successfully loaded history, assume connection is working even if health check fails
+            if self.sessionId != nil {
+                chatUILogger.info("Assuming health OK since we have a valid session")
+                self.healthOK = true
+            } else {
+                self.healthOK = false
+            }
         }
     }
 
@@ -512,7 +556,10 @@ public final class OpenClawChatViewModel {
     private static func mimeType(for url: URL) -> String? {
         let ext = url.pathExtension
         guard !ext.isEmpty else { return nil }
-        return (UTType(filenameExtension: ext) ?? .data).preferredMIMEType
+        guard let uti = UTType(filenameExtension: ext) else {
+            return UTType.data.preferredMIMEType
+        }
+        return uti.preferredMIMEType
     }
 
     private func addImageAttachment(url: URL?, data: Data, fileName: String, mimeType: String) async {
@@ -522,7 +569,7 @@ public final class OpenClawChatViewModel {
         }
 
         let uti: UTType = {
-            if let url {
+            if let url = url {
                 return UTType(filenameExtension: url.pathExtension) ?? .data
             }
             return UTType(mimeType: mimeType) ?? .data

@@ -38,6 +38,16 @@ const APPROVAL_METHODS = new Set([
   "exec.approval.resolve",
 ]);
 const NODE_ROLE_METHODS = new Set(["node.invoke.result", "node.event", "skills.bins"]);
+// Methods that nodes are also allowed to call (in addition to NODE_ROLE_METHODS).
+// These bypass the node role hard-reject but still go through normal scope checks for operators.
+const NODE_ALLOWED_METHODS = new Set([
+  "chat.send",
+  "chat.abort",
+  "chat.history",
+  "health",
+  "sessions.list",
+  "sessions.preview",
+]);
 const PAIRING_METHODS = new Set([
   "node.pair.request",
   "node.pair.list",
@@ -109,6 +119,9 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     return errorShape(ErrorCodes.INVALID_REQUEST, `unauthorized role: ${role}`);
   }
   if (role === "node") {
+    if (NODE_ALLOWED_METHODS.has(method)) {
+      return null;
+    }
     return errorShape(ErrorCodes.INVALID_REQUEST, `unauthorized role: ${role}`);
   }
   if (role !== "operator") {

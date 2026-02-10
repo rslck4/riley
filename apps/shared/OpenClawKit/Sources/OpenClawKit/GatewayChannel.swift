@@ -72,10 +72,6 @@ public struct GatewayConnectOptions: Sendable {
     public var clientId: String
     public var clientMode: String
     public var clientDisplayName: String?
-    // When false, the connection omits the signed device identity payload.
-    // This is useful for secondary "operator" connections where the shared gateway token
-    // should authorize without triggering device pairing flows.
-    public var includeDeviceIdentity: Bool
 
     public init(
         role: String,
@@ -85,8 +81,7 @@ public struct GatewayConnectOptions: Sendable {
         permissions: [String: Bool],
         clientId: String,
         clientMode: String,
-        clientDisplayName: String?,
-        includeDeviceIdentity: Bool = true)
+        clientDisplayName: String?)
     {
         self.role = role
         self.scopes = scopes
@@ -96,7 +91,6 @@ public struct GatewayConnectOptions: Sendable {
         self.clientId = clientId
         self.clientMode = clientMode
         self.clientDisplayName = clientDisplayName
-        self.includeDeviceIdentity = includeDeviceIdentity
     }
 }
 
@@ -114,12 +108,20 @@ private enum ConnectChallengeError: Error {
     case timeout
 }
 
+/// The gateway rejected the connect handshake because the device has not been paired/approved yet.
+/// Callers should show "Approval pending" and retry on a longer cadence rather than tight-looping.
+public struct GatewayPairingRequiredError: Error, LocalizedError, @unchecked Sendable {
+    public let requestId: String?
+    public var errorDescription: String? { "pairing required" }
+}
+
 public actor GatewayChannelActor {
     private let logger = Logger(subsystem: "ai.openclaw", category: "gateway")
     private var task: WebSocketTaskBox?
     private var pending: [String: CheckedContinuation<GatewayFrame, Error>] = [:]
     private var connected = false
     private var isConnecting = false
+    private var pairingPending = false
     private var connectWaiters: [CheckedContinuation<Void, Error>] = []
     private var url: URL
     private var token: String?
@@ -133,8 +135,13 @@ public actor GatewayChannelActor {
     private var lastAuthSource: GatewayAuthSource = .none
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
-    private let connectTimeoutSeconds: Double = 6
-    private let connectChallengeTimeoutSeconds: Double = 3.0
+    private let connectTimeoutSeconds: Double = 60
+    private let connectChallengeTimeoutSeconds: Double = 30.0
+
+    // Some environments (notably iOS under load / after WebKit spin-up) can take
+    // longer than a fraction of a second to deliver the initial `connect.challenge`
+    // event. If we time out too aggressively we will fall back to a v1 signature
+    // (no nonce) and the gateway may reject the handshake with `device-nonce-missing`.
     private var watchdogTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private let defaultRequestTimeoutMs: Double = 15000
@@ -206,7 +213,10 @@ public actor GatewayChannelActor {
         while self.shouldReconnect {
             try? await Task.sleep(nanoseconds: 30 * 1_000_000_000) // 30s cadence
             guard self.shouldReconnect else { return }
-            if self.connected { continue }
+            // Skip watchdog reconnects while the caller is managing a pairing retry loop.
+            // Extra connection attempts during pairing create duplicate pairing requests
+            // that churn the gateway's approval prompt.
+            if self.connected || self.pairingPending { continue }
             do {
                 try await self.connect()
             } catch {
@@ -241,20 +251,31 @@ public actor GatewayChannelActor {
                 },
                 operation: { try await self.sendConnect() })
         } catch {
-            let wrapped = self.wrap(error, context: "connect to gateway @ \(self.url.absoluteString)")
+            // Preserve GatewayPairingRequiredError so callers can distinguish
+            // "needs approval" from transient failures and avoid tight-loop reconnects.
+            let isPairing = error is GatewayPairingRequiredError
+            let rethrown: Error = isPairing
+                ? error
+                : self.wrap(error, context: "connect to gateway @ \(self.url.absoluteString)")
             self.connected = false
+            self.pairingPending = isPairing
             self.task?.cancel(with: .goingAway, reason: nil)
-            await self.disconnectHandler?("connect failed: \(wrapped.localizedDescription)")
+            // Skip disconnectHandler for pairing errors — the caller manages the
+            // "Approval pending" status directly and we don't want it overwritten.
+            if !isPairing {
+                await self.disconnectHandler?("connect failed: \(rethrown.localizedDescription)")
+            }
             let waiters = self.connectWaiters
             self.connectWaiters.removeAll()
             for waiter in waiters {
-                waiter.resume(throwing: wrapped)
+                waiter.resume(throwing: rethrown)
             }
-            self.logger.error("gateway ws connect failed \(wrapped.localizedDescription, privacy: .public)")
-            throw wrapped
+            self.logger.error("gateway ws connect failed \(rethrown.localizedDescription, privacy: .public)")
+            throw rethrown
         }
         self.listen()
         self.connected = true
+        self.pairingPending = false
         self.backoffMs = 500
         self.lastSeq = nil
 
@@ -313,15 +334,9 @@ public actor GatewayChannelActor {
         if !options.permissions.isEmpty {
             params["permissions"] = ProtoAnyCodable(options.permissions)
         }
-        let includeDeviceIdentity = options.includeDeviceIdentity
-        let identity = includeDeviceIdentity ? DeviceIdentityStore.loadOrCreate() : nil
-        let storedToken =
-            (includeDeviceIdentity && identity != nil)
-                ? DeviceAuthStore.loadToken(deviceId: identity!.deviceId, role: role)?.token
-                : nil
-        // If we're not sending a device identity, a device token can't be validated server-side.
-        // In that mode we always use the shared gateway token/password.
-        let authToken = includeDeviceIdentity ? (storedToken ?? self.token) : self.token
+        let identity = DeviceIdentityStore.loadOrCreate()
+        let storedToken = DeviceAuthStore.loadToken(deviceId: identity.deviceId, role: role)?.token
+        let authToken = storedToken ?? self.token
         let authSource: GatewayAuthSource
         if storedToken != nil {
             authSource = .deviceToken
@@ -334,18 +349,21 @@ public actor GatewayChannelActor {
         }
         self.lastAuthSource = authSource
         self.logger.info("gateway connect auth=\(authSource.rawValue, privacy: .public)")
-        let canFallbackToShared = includeDeviceIdentity && storedToken != nil && self.token != nil
+        let canFallbackToShared = storedToken != nil && self.token != nil
         if let authToken {
             params["auth"] = ProtoAnyCodable(["token": ProtoAnyCodable(authToken)])
         } else if let password = self.password {
             params["auth"] = ProtoAnyCodable(["password": ProtoAnyCodable(password)])
         }
         let signedAtMs = Int(Date().timeIntervalSince1970 * 1000)
-        let connectNonce = try await self.waitForConnectChallenge()
+        let connectNonce: String? = try? await self.waitForConnectChallenge()
+        if connectNonce == nil {
+            self.logger.warning("connect.challenge timed out, attempting connection without nonce")
+        }
         let scopesValue = scopes.joined(separator: ",")
         var payloadParts = [
-            connectNonce == nil ? "v1" : "v2",
-            identity?.deviceId ?? "",
+            "v2",
+            identity.deviceId,
             clientId,
             clientMode,
             role,
@@ -353,24 +371,30 @@ public actor GatewayChannelActor {
             String(signedAtMs),
             authToken ?? "",
         ]
+        // Only include nonce in signature when the server actually issued one.
+        // Sending an empty nonce fails the gateway's NonEmptyString schema validation
+        // and triggers a "device-nonce-missing" rejection.
         if let connectNonce {
             payloadParts.append(connectNonce)
         }
         let payload = payloadParts.joined(separator: "|")
-        if includeDeviceIdentity, let identity {
-            if let signature = DeviceIdentityStore.signPayload(payload, identity: identity),
-               let publicKey = DeviceIdentityStore.publicKeyBase64Url(identity) {
-                var device: [String: ProtoAnyCodable] = [
-                    "id": ProtoAnyCodable(identity.deviceId),
-                    "publicKey": ProtoAnyCodable(publicKey),
-                    "signature": ProtoAnyCodable(signature),
-                    "signedAt": ProtoAnyCodable(signedAtMs),
-                ]
-                if let connectNonce {
-                    device["nonce"] = ProtoAnyCodable(connectNonce)
-                }
-                params["device"] = ProtoAnyCodable(device)
+
+        // Provide device identity so the gateway can associate this client with a stable deviceId.
+        // (The gateway may still enforce pairing/approval depending on server policy.)
+        if let signature = DeviceIdentityStore.signPayload(payload, identity: identity),
+           let publicKey = DeviceIdentityStore.publicKeyBase64Url(identity) {
+            var device: [String: ProtoAnyCodable] = [
+                "id": ProtoAnyCodable(identity.deviceId),
+                "publicKey": ProtoAnyCodable(publicKey),
+                "signature": ProtoAnyCodable(signature),
+                "signedAt": ProtoAnyCodable(signedAtMs),
+            ]
+            // Only set nonce when present; omitting is valid (Optional<NonEmptyString>),
+            // but sending "" triggers schema rejection.
+            if let connectNonce {
+                device["nonce"] = ProtoAnyCodable(connectNonce)
             }
+            params["device"] = ProtoAnyCodable(device)
         }
 
         let frame = RequestFrame(
@@ -385,9 +409,7 @@ public actor GatewayChannelActor {
             try await self.handleConnectResponse(response, identity: identity, role: role)
         } catch {
             if canFallbackToShared {
-                if let identity {
-                    DeviceAuthStore.clearToken(deviceId: identity.deviceId, role: role)
-                }
+                DeviceAuthStore.clearToken(deviceId: identity.deviceId, role: role)
             }
             throw error
         }
@@ -395,11 +417,21 @@ public actor GatewayChannelActor {
 
     private func handleConnectResponse(
         _ res: ResponseFrame,
-        identity: DeviceIdentity?,
+        identity: DeviceIdentity,
         role: String
     ) async throws {
         if res.ok == false {
+            let code = res.error?["code"]?.value as? String
             let msg = (res.error?["message"]?.value as? String) ?? "gateway connect failed"
+
+            // Surface pairing-required as a distinct error so callers can show
+            // "Approval pending" instead of tight-loop reconnecting.
+            if code == "NOT_PAIRED" {
+                let details = res.error?["details"]?.value as? [String: Any]
+                let requestId = details?["requestId"] as? String
+                throw GatewayPairingRequiredError(requestId: requestId)
+            }
+
             throw NSError(domain: "Gateway", code: 1008, userInfo: [NSLocalizedDescriptionKey: msg])
         }
         guard let payload = res.payload else {
@@ -420,13 +452,11 @@ public actor GatewayChannelActor {
             let authRole = auth["role"]?.value as? String ?? role
             let scopes = (auth["scopes"]?.value as? [ProtoAnyCodable])?
                 .compactMap { $0.value as? String } ?? []
-            if let identity {
-                _ = DeviceAuthStore.storeToken(
-                    deviceId: identity.deviceId,
-                    role: authRole,
-                    token: deviceToken,
-                    scopes: scopes)
-            }
+            _ = DeviceAuthStore.storeToken(
+                deviceId: identity.deviceId,
+                role: authRole,
+                token: deviceToken,
+                scopes: scopes)
         }
         self.lastTick = Date()
         self.tickTask?.cancel()
@@ -516,10 +546,7 @@ public actor GatewayChannelActor {
                     }
                 })
         } catch {
-            if error is ConnectChallengeError {
-                self.logger.warning("gateway connect challenge timed out")
-                return nil
-            }
+            if error is ConnectChallengeError { return nil }
             throw error
         }
     }
