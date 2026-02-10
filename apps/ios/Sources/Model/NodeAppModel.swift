@@ -223,15 +223,21 @@ final class NodeAppModel {
 
         self.gatewayTask = Task {
             var attempt = 0
+            var pairingPending = false
             while !Task.isCancelled {
-                await MainActor.run {
-                    if attempt == 0 {
-                        self.gatewayStatusText = "Connecting…"
-                    } else {
-                        self.gatewayStatusText = "Reconnecting…"
+                // Skip status reset when already connected (the connect call below
+                // will be a no-op) or waiting for pairing approval.
+                let alreadyConnected = await MainActor.run { self.gatewayConnected }
+                if !pairingPending && !alreadyConnected {
+                    await MainActor.run {
+                        if attempt == 0 {
+                            self.gatewayStatusText = "Connecting…"
+                        } else {
+                            self.gatewayStatusText = "Reconnecting…"
+                        }
+                        self.gatewayServerName = nil
+                        self.gatewayRemoteAddress = nil
                     }
-                    self.gatewayServerName = nil
-                    self.gatewayRemoteAddress = nil
                 }
 
                 do {
@@ -255,7 +261,10 @@ final class NodeAppModel {
                             }
                             await self.refreshBrandingFromGateway()
                             await self.startVoiceWakeSync()
-                            await self.showA2UIOnConnectIfNeeded()
+                            // Avoid auto-loading the remote A2UI canvas on connect; it spins up WebKit
+                            // (slow on some devices) and can make the app feel hung while Chat is trying to load.
+                            // You can still open the canvas manually from the UI.
+                            // await self.showA2UIOnConnectIfNeeded()
                         },
                         onDisconnected: { [weak self] reason in
                             guard let self else { return }
@@ -280,10 +289,25 @@ final class NodeAppModel {
                         })
 
                     if Task.isCancelled { break }
+                    pairingPending = false
                     attempt = 0
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch is GatewayPairingRequiredError {
+                    // Device not yet approved on the gateway. Show a clear status and
+                    // retry on a long cadence so the operator has time to approve.
+                    if Task.isCancelled { break }
+                    pairingPending = true
+                    await MainActor.run {
+                        self.gatewayStatusText = "Approval pending — approve on gateway"
+                        self.gatewayServerName = url.host ?? "gateway"
+                        self.gatewayConnected = false
+                    }
+                    // 30 seconds between pairing retries — gives the operator time to
+                    // approve without churning pairing requests on the gateway.
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)
                 } catch {
                     if Task.isCancelled { break }
+                    pairingPending = false
                     attempt += 1
                     await MainActor.run {
                         self.gatewayStatusText = "Gateway error: \(error.localizedDescription)"

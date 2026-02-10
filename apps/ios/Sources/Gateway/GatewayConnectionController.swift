@@ -22,6 +22,17 @@ final class GatewayConnectionController {
 
         GatewaySettingsStore.bootstrapPersistence()
         let defaults = UserDefaults.standard
+
+        // Register defaults so UserDefaults.bool(forKey:) returns the correct
+        // value even before the user has explicitly toggled the setting.
+        // @AppStorage defaults are UI-only — they don't write to UserDefaults,
+        // so without this, auto-connect reads false for TLS and builds ws://
+        // instead of wss://, which ATS blocks.
+        defaults.register(defaults: [
+            "gateway.manual.tls": true,
+            "gateway.manual.port": 18789,
+        ])
+
         self.discovery.setDebugLoggingEnabled(defaults.bool(forKey: "gateway.discovery.debugLogs"))
 
         self.updateFromDiscovery()
@@ -207,8 +218,7 @@ final class GatewayConnectionController {
         guard let appModel else { return }
         let connectOptions = self.makeConnectOptions()
 
-        Task { [weak self] in
-            guard let self else { return }
+        Task {
             await MainActor.run {
                 appModel.gatewayStatusText = "Connecting…"
             }

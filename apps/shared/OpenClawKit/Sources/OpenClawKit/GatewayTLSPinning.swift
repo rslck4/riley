@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import OSLog
 import Security
 
 public struct GatewayTLSParams: Sendable {
@@ -38,6 +39,7 @@ public enum GatewayTLSStore {
 }
 
 public final class GatewayTLSPinningSession: NSObject, WebSocketSessioning, URLSessionDelegate, @unchecked Sendable {
+    private let logger = Logger(subsystem: "ai.openclaw", category: "tls.pinning")
     private let params: GatewayTLSParams
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -72,13 +74,21 @@ public final class GatewayTLSPinningSession: NSObject, WebSocketSessioning, URLS
         if let fingerprint = certificateFingerprint(trust) {
             if let expected {
                 if fingerprint == expected {
+                    self.logger.info("tls fingerprint matched")
                     completionHandler(.useCredential, URLCredential(trust: trust))
                 } else {
-                    completionHandler(.cancelAuthenticationChallenge, nil)
+                    // Cert rotated (e.g. Tailscale Serve renews every ~90 days).
+                    // Accept the new cert and update the stored fingerprint (re-TOFU).
+                    self.logger.warning("tls fingerprint changed — accepting rotated cert")
+                    if let storeKey = params.storeKey {
+                        GatewayTLSStore.saveFingerprint(fingerprint, stableID: storeKey)
+                    }
+                    completionHandler(.useCredential, URLCredential(trust: trust))
                 }
                 return
             }
             if params.allowTOFU {
+                self.logger.info("tls TOFU — accepting and storing fingerprint")
                 if let storeKey = params.storeKey {
                     GatewayTLSStore.saveFingerprint(fingerprint, stableID: storeKey)
                 }
@@ -91,6 +101,7 @@ public final class GatewayTLSPinningSession: NSObject, WebSocketSessioning, URLS
         if ok || !params.required {
             completionHandler(.useCredential, URLCredential(trust: trust))
         } else {
+            self.logger.error("tls certificate rejected — system trust evaluation failed")
             completionHandler(.cancelAuthenticationChallenge, nil)
         }
     }

@@ -157,7 +157,10 @@ public actor GatewayNodeSession {
             _ = await self.waitForSnapshot(timeoutMs: 500)
             await self.notifyConnectedIfNeeded()
         } catch {
-            await onDisconnected(error.localizedDescription)
+            // Skip onDisconnected for pairing errors — the caller manages status.
+            if !(error is GatewayPairingRequiredError) {
+                await onDisconnected(error.localizedDescription)
+            }
             throw error
         }
     }

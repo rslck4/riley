@@ -2,6 +2,9 @@ import OpenClawChatUI
 import OpenClawKit
 import OpenClawProtocol
 import Foundation
+import OSLog
+
+private let chatTransportLogger = Logger(subsystem: "ai.openclaw", category: "ChatTransport")
 
 struct IOSGatewayChatTransport: OpenClawChatTransport, Sendable {
     private let gateway: GatewayNodeSession
@@ -33,10 +36,12 @@ struct IOSGatewayChatTransport: OpenClawChatTransport, Sendable {
     }
 
     func setActiveSessionKey(_ sessionKey: String) async throws {
+        chatTransportLogger.info("Setting active session key: \(sessionKey, privacy: .public)")
         struct Subscribe: Codable { var sessionKey: String }
         let data = try JSONEncoder().encode(Subscribe(sessionKey: sessionKey))
         let json = String(data: data, encoding: .utf8)
         await self.gateway.sendEvent(event: "chat.subscribe", payloadJSON: json)
+        chatTransportLogger.info("Sent chat.subscribe event for session: \(sessionKey, privacy: .public)")
     }
 
     func requestHistory(sessionKey: String) async throws -> OpenClawChatHistoryPayload {
@@ -83,11 +88,17 @@ struct IOSGatewayChatTransport: OpenClawChatTransport, Sendable {
     }
 
     func events() -> AsyncStream<OpenClawChatTransportEvent> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: .bufferingNewest(100)) { continuation in
             let task = Task {
-                let stream = await self.gateway.subscribeServerEvents()
+                chatTransportLogger.info("Chat transport events stream starting...")
+                let stream = await self.gateway.subscribeServerEvents(bufferingNewest: 100)
+                chatTransportLogger.info("Subscribed to gateway server events")
                 for await evt in stream {
-                    if Task.isCancelled { return }
+                    if Task.isCancelled { 
+                        chatTransportLogger.info("Chat event stream cancelled")
+                        return 
+                    }
+                    chatTransportLogger.debug("Received gateway event: \(evt.event, privacy: .public)")
                     switch evt.event {
                     case "tick":
                         continuation.yield(.tick)
@@ -100,6 +111,7 @@ struct IOSGatewayChatTransport: OpenClawChatTransport, Sendable {
                             as: OpenClawGatewayHealthOK.self))?.ok ?? true
                         continuation.yield(.health(ok: ok))
                     case "chat":
+                        chatTransportLogger.info("Received chat event from gateway")
                         guard let payload = evt.payload else { break }
                         if let chatPayload = try? GatewayPayloadDecoding.decode(
                             payload,
@@ -108,6 +120,7 @@ struct IOSGatewayChatTransport: OpenClawChatTransport, Sendable {
                             continuation.yield(.chat(chatPayload))
                         }
                     case "agent":
+                        chatTransportLogger.debug("Received agent event from gateway")
                         guard let payload = evt.payload else { break }
                         if let agentPayload = try? GatewayPayloadDecoding.decode(
                             payload,
@@ -119,9 +132,11 @@ struct IOSGatewayChatTransport: OpenClawChatTransport, Sendable {
                         break
                     }
                 }
+                chatTransportLogger.info("Chat event stream ended")
             }
 
             continuation.onTermination = { @Sendable _ in
+                chatTransportLogger.info("Chat event stream terminated")
                 task.cancel()
             }
         }

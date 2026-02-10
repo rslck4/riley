@@ -108,12 +108,20 @@ private enum ConnectChallengeError: Error {
     case timeout
 }
 
+/// The gateway rejected the connect handshake because the device has not been paired/approved yet.
+/// Callers should show "Approval pending" and retry on a longer cadence rather than tight-looping.
+public struct GatewayPairingRequiredError: Error, LocalizedError, @unchecked Sendable {
+    public let requestId: String?
+    public var errorDescription: String? { "pairing required" }
+}
+
 public actor GatewayChannelActor {
     private let logger = Logger(subsystem: "ai.openclaw", category: "gateway")
     private var task: WebSocketTaskBox?
     private var pending: [String: CheckedContinuation<GatewayFrame, Error>] = [:]
     private var connected = false
     private var isConnecting = false
+    private var pairingPending = false
     private var connectWaiters: [CheckedContinuation<Void, Error>] = []
     private var url: URL
     private var token: String?
@@ -127,8 +135,13 @@ public actor GatewayChannelActor {
     private var lastAuthSource: GatewayAuthSource = .none
     private let decoder = JSONDecoder()
     private let encoder = JSONEncoder()
-    private let connectTimeoutSeconds: Double = 6
-    private let connectChallengeTimeoutSeconds: Double = 0.75
+    private let connectTimeoutSeconds: Double = 60
+    private let connectChallengeTimeoutSeconds: Double = 30.0
+
+    // Some environments (notably iOS under load / after WebKit spin-up) can take
+    // longer than a fraction of a second to deliver the initial `connect.challenge`
+    // event. If we time out too aggressively we will fall back to a v1 signature
+    // (no nonce) and the gateway may reject the handshake with `device-nonce-missing`.
     private var watchdogTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private let defaultRequestTimeoutMs: Double = 15000
@@ -200,7 +213,10 @@ public actor GatewayChannelActor {
         while self.shouldReconnect {
             try? await Task.sleep(nanoseconds: 30 * 1_000_000_000) // 30s cadence
             guard self.shouldReconnect else { return }
-            if self.connected { continue }
+            // Skip watchdog reconnects while the caller is managing a pairing retry loop.
+            // Extra connection attempts during pairing create duplicate pairing requests
+            // that churn the gateway's approval prompt.
+            if self.connected || self.pairingPending { continue }
             do {
                 try await self.connect()
             } catch {
@@ -235,20 +251,31 @@ public actor GatewayChannelActor {
                 },
                 operation: { try await self.sendConnect() })
         } catch {
-            let wrapped = self.wrap(error, context: "connect to gateway @ \(self.url.absoluteString)")
+            // Preserve GatewayPairingRequiredError so callers can distinguish
+            // "needs approval" from transient failures and avoid tight-loop reconnects.
+            let isPairing = error is GatewayPairingRequiredError
+            let rethrown: Error = isPairing
+                ? error
+                : self.wrap(error, context: "connect to gateway @ \(self.url.absoluteString)")
             self.connected = false
+            self.pairingPending = isPairing
             self.task?.cancel(with: .goingAway, reason: nil)
-            await self.disconnectHandler?("connect failed: \(wrapped.localizedDescription)")
+            // Skip disconnectHandler for pairing errors — the caller manages the
+            // "Approval pending" status directly and we don't want it overwritten.
+            if !isPairing {
+                await self.disconnectHandler?("connect failed: \(rethrown.localizedDescription)")
+            }
             let waiters = self.connectWaiters
             self.connectWaiters.removeAll()
             for waiter in waiters {
-                waiter.resume(throwing: wrapped)
+                waiter.resume(throwing: rethrown)
             }
-            self.logger.error("gateway ws connect failed \(wrapped.localizedDescription, privacy: .public)")
-            throw wrapped
+            self.logger.error("gateway ws connect failed \(rethrown.localizedDescription, privacy: .public)")
+            throw rethrown
         }
         self.listen()
         self.connected = true
+        self.pairingPending = false
         self.backoffMs = 500
         self.lastSeq = nil
 
@@ -329,10 +356,13 @@ public actor GatewayChannelActor {
             params["auth"] = ProtoAnyCodable(["password": ProtoAnyCodable(password)])
         }
         let signedAtMs = Int(Date().timeIntervalSince1970 * 1000)
-        let connectNonce = try await self.waitForConnectChallenge()
+        let connectNonce: String? = try? await self.waitForConnectChallenge()
+        if connectNonce == nil {
+            self.logger.warning("connect.challenge timed out, attempting connection without nonce")
+        }
         let scopesValue = scopes.joined(separator: ",")
         var payloadParts = [
-            connectNonce == nil ? "v1" : "v2",
+            "v2",
             identity.deviceId,
             clientId,
             clientMode,
@@ -341,10 +371,16 @@ public actor GatewayChannelActor {
             String(signedAtMs),
             authToken ?? "",
         ]
+        // Only include nonce in signature when the server actually issued one.
+        // Sending an empty nonce fails the gateway's NonEmptyString schema validation
+        // and triggers a "device-nonce-missing" rejection.
         if let connectNonce {
             payloadParts.append(connectNonce)
         }
         let payload = payloadParts.joined(separator: "|")
+
+        // Provide device identity so the gateway can associate this client with a stable deviceId.
+        // (The gateway may still enforce pairing/approval depending on server policy.)
         if let signature = DeviceIdentityStore.signPayload(payload, identity: identity),
            let publicKey = DeviceIdentityStore.publicKeyBase64Url(identity) {
             var device: [String: ProtoAnyCodable] = [
@@ -353,6 +389,8 @@ public actor GatewayChannelActor {
                 "signature": ProtoAnyCodable(signature),
                 "signedAt": ProtoAnyCodable(signedAtMs),
             ]
+            // Only set nonce when present; omitting is valid (Optional<NonEmptyString>),
+            // but sending "" triggers schema rejection.
             if let connectNonce {
                 device["nonce"] = ProtoAnyCodable(connectNonce)
             }
@@ -383,7 +421,17 @@ public actor GatewayChannelActor {
         role: String
     ) async throws {
         if res.ok == false {
+            let code = res.error?["code"]?.value as? String
             let msg = (res.error?["message"]?.value as? String) ?? "gateway connect failed"
+
+            // Surface pairing-required as a distinct error so callers can show
+            // "Approval pending" instead of tight-loop reconnecting.
+            if code == "NOT_PAIRED" {
+                let details = res.error?["details"]?.value as? [String: Any]
+                let requestId = details?["requestId"] as? String
+                throw GatewayPairingRequiredError(requestId: requestId)
+            }
+
             throw NSError(domain: "Gateway", code: 1008, userInfo: [NSLocalizedDescriptionKey: msg])
         }
         guard let payload = res.payload else {
