@@ -71,3 +71,11 @@ USER.md
 
 # local tooling
 .serena/
+
+# Local build artifacts (HomePod/Mac Mini work)
+Swabble/build/
+apps/ios/build/
+apps/shared/OpenClawKit/.build/
+apps/shared/OpenClawKit/.swiftpm/
+apps/shared/OpenClawKit/build/
+apps/shared/OpenClawKit/Package.resolved
