@@ -32,7 +32,11 @@ const WRITE_SCOPE = "operator.write";
 const APPROVALS_SCOPE = "operator.approvals";
 const PAIRING_SCOPE = "operator.pairing";
 
-const APPROVAL_METHODS = new Set(["exec.approval.request", "exec.approval.resolve"]);
+const APPROVAL_METHODS = new Set([
+  "exec.approval.request",
+  "exec.approval.waitDecision",
+  "exec.approval.resolve",
+]);
 const NODE_ROLE_METHODS = new Set(["node.invoke.result", "node.event", "skills.bins"]);
 // Methods that nodes are also allowed to call (in addition to NODE_ROLE_METHODS).
 // These bypass the node role hard-reject but still go through normal scope checks for operators.
@@ -82,6 +86,8 @@ const READ_METHODS = new Set([
   "node.list",
   "node.describe",
   "chat.history",
+  "config.get",
+  "talk.config",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -156,6 +162,9 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method.startsWith("wizard.") ||
     method.startsWith("update.") ||
     method === "channels.logout" ||
+    method === "agents.create" ||
+    method === "agents.update" ||
+    method === "agents.delete" ||
     method === "skills.install" ||
     method === "skills.update" ||
     method === "cron.add" ||
