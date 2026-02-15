@@ -49,13 +49,6 @@ struct TalkOrbOverlay: View {
                 self.appModel.talkMode.userTappedOrb()
             }
 
-            let agentName = self.appModel.activeAgentName.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !agentName.isEmpty {
-                Text("Bot: \(agentName)")
-                    .font(.system(.caption, design: .rounded).weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.70))
-            }
-
             if !status.isEmpty, status != "Off" {
                 Text(status)
                     .font(.system(.footnote, design: .rounded).weight(.semibold))

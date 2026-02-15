@@ -10,7 +10,7 @@ final class DeviceStatusService: DeviceStatusServicing {
     }
 
     func status() async throws -> OpenClawDeviceStatusPayload {
-        let battery = self.batteryStatus()
+        let battery = await self.batteryStatus()
         let thermal = self.thermalStatus()
         let storage = self.storageStatus()
         let network = await self.networkStatus.currentStatus()
@@ -24,26 +24,33 @@ final class DeviceStatusService: DeviceStatusServicing {
             uptimeSeconds: uptime)
     }
 
-    func info() -> OpenClawDeviceInfoPayload {
-        let device = UIDevice.current
+    func info() async -> OpenClawDeviceInfoPayload {
+        let (deviceName, systemName, systemVersion) = await MainActor.run {
+            let d = UIDevice.current
+            return (d.name, d.systemName, d.systemVersion)
+        }
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
         let appBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
         let locale = Locale.preferredLanguages.first ?? Locale.current.identifier
         return OpenClawDeviceInfoPayload(
-            deviceName: device.name,
+            deviceName: deviceName,
             modelIdentifier: Self.modelIdentifier(),
-            systemName: device.systemName,
-            systemVersion: device.systemVersion,
+            systemName: systemName,
+            systemVersion: systemVersion,
             appVersion: appVersion,
             appBuild: appBuild,
             locale: locale)
     }
 
-    private func batteryStatus() -> OpenClawBatteryStatusPayload {
-        let device = UIDevice.current
-        device.isBatteryMonitoringEnabled = true
-        let level = device.batteryLevel >= 0 ? Double(device.batteryLevel) : nil
-        let state: OpenClawBatteryState = switch device.batteryState {
+    private func batteryStatus() async -> OpenClawBatteryStatusPayload {
+        let (level, batteryState) = await MainActor.run {
+            let d = UIDevice.current
+            d.isBatteryMonitoringEnabled = true
+            let rawLevel = d.batteryLevel
+            return (rawLevel, d.batteryState)
+        }
+        let resolvedLevel = level >= 0 ? Double(level) : nil
+        let state: OpenClawBatteryState = switch batteryState {
         case .charging: .charging
         case .full: .full
         case .unplugged: .unplugged
@@ -51,7 +58,7 @@ final class DeviceStatusService: DeviceStatusServicing {
         @unknown default: .unknown
         }
         return OpenClawBatteryStatusPayload(
-            level: level,
+            level: resolvedLevel,
             state: state,
             lowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled)
     }

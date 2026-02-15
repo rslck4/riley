@@ -125,16 +125,28 @@ final class GatewayConnectionController {
     }
 
     private func maybeAutoConnect() {
-        guard !self.didAutoConnect else { return }
-        guard let appModel = self.appModel else { return }
-        guard appModel.gatewayServerName == nil else { return }
+        guard !self.didAutoConnect else {
+            self.discovery.appendDebugLog("maybeAutoConnect: already attempted")
+            return
+        }
+        guard let appModel = self.appModel else {
+            self.discovery.appendDebugLog("maybeAutoConnect: no appModel")
+            return
+        }
+        guard appModel.gatewayServerName == nil else {
+            self.discovery.appendDebugLog("maybeAutoConnect: already connected")
+            return
+        }
 
         let defaults = UserDefaults.standard
         let manualEnabled = defaults.bool(forKey: "gateway.manual.enabled")
 
         let instanceId = defaults.string(forKey: "node.instanceId")?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !instanceId.isEmpty else { return }
+        guard !instanceId.isEmpty else {
+            self.discovery.appendDebugLog("maybeAutoConnect: instanceId not set")
+            return
+        }
 
         let token = GatewaySettingsStore.loadGatewayToken(instanceId: instanceId)
         let password = GatewaySettingsStore.loadGatewayPassword(instanceId: instanceId)
@@ -175,15 +187,30 @@ final class GatewayConnectionController {
         let candidates = [preferredStableID, lastDiscoveredStableID].filter { !$0.isEmpty }
         guard let targetStableID = candidates.first(where: { id in
             self.gateways.contains(where: { $0.stableID == id })
-        }) else { return }
+        }) else {
+            self.discovery.appendDebugLog(
+                "maybeAutoConnect: no matching gateway " +
+                "(discovered=\(self.gateways.count), preferred=\(preferredStableID), last=\(lastDiscoveredStableID))")
+            return
+        }
 
-        guard let target = self.gateways.first(where: { $0.stableID == targetStableID }) else { return }
-        guard let host = self.resolveGatewayHost(target) else { return }
+        guard let target = self.gateways.first(where: { $0.stableID == targetStableID }) else {
+            self.discovery.appendDebugLog("maybeAutoConnect: target gateway not found")
+            return
+        }
+        guard let host = self.resolveGatewayHost(target) else {
+            self.discovery.appendDebugLog("maybeAutoConnect: could not resolve host for \(target.name)")
+            return
+        }
         let port = target.gatewayPort ?? 18789
         let tlsParams = self.resolveDiscoveredTLSParams(gateway: target)
         guard let url = self.buildGatewayURL(host: host, port: port, useTLS: tlsParams?.required == true)
-        else { return }
+        else {
+            self.discovery.appendDebugLog("maybeAutoConnect: failed to build URL")
+            return
+        }
 
+        self.discovery.appendDebugLog("maybeAutoConnect: connecting to \(target.name) at \(host):\(port)")
         self.didAutoConnect = true
         self.startAutoConnect(
             url: url,
@@ -200,8 +227,17 @@ final class GatewayConnectionController {
         let existingLast = defaults.string(forKey: "gateway.lastDiscoveredStableID")?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
-        // Avoid overriding user intent (preferred/lastDiscovered are also set on manual Connect).
-        guard preferred.isEmpty, existingLast.isEmpty else { return }
+        // If preferred gateway exists and is currently discovered, keep using it.
+        if !preferred.isEmpty, gateways.contains(where: { $0.stableID == preferred }) {
+            return
+        }
+
+        // If existing last discovered gateway is still available, keep using it.
+        if !existingLast.isEmpty, gateways.contains(where: { $0.stableID == existingLast }) {
+            return
+        }
+
+        // Otherwise, update to the first available gateway.
         guard let first = gateways.first else { return }
 
         defaults.set(first.stableID, forKey: "gateway.lastDiscoveredStableID")
@@ -288,8 +324,8 @@ final class GatewayConnectionController {
         let displayName = self.resolvedDisplayName(defaults: defaults)
 
         return GatewayConnectOptions(
-            role: "node",
-            scopes: [],
+            role: "operator",
+            scopes: ["chat", "node", "operator.read", "operator.write"],
             caps: self.currentCaps(),
             commands: self.currentCommands(),
             permissions: [:],

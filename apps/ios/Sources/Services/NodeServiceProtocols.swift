@@ -32,7 +32,7 @@ protocol LocationServicing: Sendable {
 
 protocol DeviceStatusServicing: Sendable {
     func status() async throws -> OpenClawDeviceStatusPayload
-    func info() -> OpenClawDeviceInfoPayload
+    func info() async -> OpenClawDeviceInfoPayload
 }
 
 protocol PhotosServicing: Sendable {

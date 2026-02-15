@@ -192,7 +192,7 @@ final class GatewayDiscoveryModel {
         }
     }
 
-    private func appendDebugLog(_ message: String) {
+    func appendDebugLog(_ message: String) {
         guard self.debugLoggingEnabled else { return }
         self.debugLog.append(DebugLogEntry(ts: Date(), message: message))
         if self.debugLog.count > 200 {

@@ -3,10 +3,6 @@ import Network
 import os
 
 extension NodeAppModel {
-    func _test_resolveA2UIHostURL() async -> String? {
-        await self.resolveA2UIHostURL()
-    }
-
     func resolveA2UIHostURL() async -> String? {
         guard let raw = await self.gatewaySession.currentCanvasHostUrl() else { return nil }
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)

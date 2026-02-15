@@ -32,7 +32,7 @@ final class NodeAppModel {
     let voiceWake = VoiceWakeManager()
     let talkMode = TalkModeManager()
     private let locationService = LocationService()
-    private var lastAutoA2uiURL: String?
+    var lastAutoA2uiURL: String?
 
     private var gatewayConnected = false
     var gatewaySession: GatewayNodeSession { self.gateway }
@@ -150,26 +150,6 @@ final class NodeAppModel {
         }
     }
 
-    private func resolveA2UIHostURL() async -> String? {
-        guard let raw = await self.gateway.currentCanvasHostUrl() else { return nil }
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let base = URL(string: trimmed) else { return nil }
-        return base.appendingPathComponent("__openclaw__/a2ui/").absoluteString + "?platform=ios"
-    }
-
-    private func showA2UIOnConnectIfNeeded() async {
-        guard let a2uiUrl = await self.resolveA2UIHostURL() else { return }
-        let current = self.screen.urlString.trimmingCharacters(in: .whitespacesAndNewlines)
-        if current.isEmpty || current == self.lastAutoA2uiURL {
-            self.screen.navigate(to: a2uiUrl)
-            self.lastAutoA2uiURL = a2uiUrl
-        }
-    }
-
-    private func showLocalCanvasOnDisconnect() {
-        self.lastAutoA2uiURL = nil
-        self.screen.showDefaultCanvas()
-    }
 
     func setScenePhase(_ phase: ScenePhase) {
         switch phase {
@@ -972,10 +952,6 @@ extension NodeAppModel {
 
     func _test_handleCanvasA2UIAction(body: [String: Any]) async {
         await self.handleCanvasA2UIAction(body: body)
-    }
-
-    func _test_resolveA2UIHostURL() async -> String? {
-        await self.resolveA2UIHostURL()
     }
 
     func _test_showLocalCanvasOnDisconnect() {

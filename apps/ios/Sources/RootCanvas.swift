@@ -32,6 +32,44 @@ struct RootCanvas: View {
     }
 
     var body: some View {
+        contentView
+            .gatewayTrustPromptAlert()
+            .sheet(item: self.$presentedSheet) { sheet in
+                switch sheet {
+                case .settings:
+                    SettingsTab()
+                case .chat:
+                    ChatSheet(
+                        gateway: self.appModel.gatewaySession,
+                        sessionKey: self.appModel.mainSessionKey,
+                        userAccent: self.appModel.seamColor)
+                }
+            }
+            .modifier(LifecycleModifiers(
+                updateIdleTimer: self.updateIdleTimer,
+                maybeAutoOpenSettings: self.maybeAutoOpenSettings,
+                preventSleep: self.preventSleep,
+                scenePhase: self.scenePhase,
+                toastDismissTask: self.$toastDismissTask))
+            .modifier(CanvasDebugModifiers(
+                updateCanvasDebugStatus: self.updateCanvasDebugStatus,
+                canvasDebugStatusEnabled: self.canvasDebugStatusEnabled,
+                gatewayStatusText: self.appModel.gatewayStatusText,
+                gatewayServerName: self.appModel.gatewayServerName,
+                gatewayRemoteAddress: self.appModel.gatewayRemoteAddress))
+            .modifier(GatewayModifiers(
+                onboardingComplete: self.$onboardingComplete,
+                hasConnectedOnce: self.$hasConnectedOnce,
+                maybeAutoOpenSettings: self.maybeAutoOpenSettings,
+                gatewayServerName: self.appModel.gatewayServerName))
+            .modifier(VoiceWakeModifiers(
+                voiceWakeToastText: self.$voiceWakeToastText,
+                toastDismissTask: self.$toastDismissTask,
+                lastTriggeredCommand: self.voiceWake.lastTriggeredCommand))
+    }
+    
+    @ViewBuilder
+    private var contentView: some View {
         ZStack {
             CanvasContent(
                 systemColorScheme: self.systemColorScheme,
@@ -51,59 +89,6 @@ struct RootCanvas: View {
             if self.appModel.cameraFlashNonce != 0 {
                 CameraFlashOverlay(nonce: self.appModel.cameraFlashNonce)
             }
-        }
-        .gatewayTrustPromptAlert()
-        .sheet(item: self.$presentedSheet) { sheet in
-            switch sheet {
-            case .settings:
-                SettingsTab()
-            case .chat:
-                ChatSheet(
-                    gateway: self.appModel.operatorSession,
-                    sessionKey: self.appModel.mainSessionKey,
-                    agentName: self.appModel.activeAgentName,
-                    userAccent: self.appModel.seamColor)
-            }
-        }
-        .onAppear { self.updateIdleTimer() }
-        .onAppear { self.maybeAutoOpenSettings() }
-        .onChange(of: self.preventSleep) { _, _ in self.updateIdleTimer() }
-        .onChange(of: self.scenePhase) { _, _ in self.updateIdleTimer() }
-        .onAppear { self.updateCanvasDebugStatus() }
-        .onChange(of: self.canvasDebugStatusEnabled) { _, _ in self.updateCanvasDebugStatus() }
-        .onChange(of: self.appModel.gatewayStatusText) { _, _ in self.updateCanvasDebugStatus() }
-        .onChange(of: self.appModel.gatewayServerName) { _, _ in self.updateCanvasDebugStatus() }
-        .onChange(of: self.appModel.gatewayRemoteAddress) { _, _ in self.updateCanvasDebugStatus() }
-        .onChange(of: self.appModel.gatewayServerName) { _, newValue in
-            if newValue != nil {
-                self.onboardingComplete = true
-                self.hasConnectedOnce = true
-            }
-            self.maybeAutoOpenSettings()
-        }
-        .onChange(of: self.voiceWake.lastTriggeredCommand) { _, newValue in
-            guard let newValue else { return }
-            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-
-            self.toastDismissTask?.cancel()
-            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
-                self.voiceWakeToastText = trimmed
-            }
-
-            self.toastDismissTask = Task {
-                try? await Task.sleep(nanoseconds: 2_300_000_000)
-                await MainActor.run {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        self.voiceWakeToastText = nil
-                    }
-                }
-            }
-        }
-        .onDisappear {
-            UIApplication.shared.isIdleTimerDisabled = false
-            self.toastDismissTask?.cancel()
-            self.toastDismissTask = nil
         }
     }
 
@@ -394,6 +379,93 @@ private struct CameraFlashOverlay: View {
                     try? await Task.sleep(nanoseconds: 110_000_000)
                     withAnimation(.easeOut(duration: 0.32)) {
                         self.opacity = 0
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - View Modifiers
+
+private struct LifecycleModifiers: ViewModifier {
+    let updateIdleTimer: () -> Void
+    let maybeAutoOpenSettings: () -> Void
+    let preventSleep: Bool
+    let scenePhase: ScenePhase
+    @Binding var toastDismissTask: Task<Void, Never>?
+    
+    func body(content: Content) -> some View {
+        content
+            .onAppear { self.updateIdleTimer() }
+            .onAppear { self.maybeAutoOpenSettings() }
+            .onChange(of: self.preventSleep) { _, _ in self.updateIdleTimer() }
+            .onChange(of: self.scenePhase) { _, _ in self.updateIdleTimer() }
+            .onDisappear {
+                UIApplication.shared.isIdleTimerDisabled = false
+                self.toastDismissTask?.cancel()
+                self.toastDismissTask = nil
+            }
+    }
+}
+
+private struct CanvasDebugModifiers: ViewModifier {
+    let updateCanvasDebugStatus: () -> Void
+    let canvasDebugStatusEnabled: Bool
+    let gatewayStatusText: String
+    let gatewayServerName: String?
+    let gatewayRemoteAddress: String?
+    
+    func body(content: Content) -> some View {
+        content
+            .onAppear { self.updateCanvasDebugStatus() }
+            .onChange(of: self.canvasDebugStatusEnabled) { _, _ in self.updateCanvasDebugStatus() }
+            .onChange(of: self.gatewayStatusText) { _, _ in self.updateCanvasDebugStatus() }
+            .onChange(of: self.gatewayServerName) { _, _ in self.updateCanvasDebugStatus() }
+            .onChange(of: self.gatewayRemoteAddress) { _, _ in self.updateCanvasDebugStatus() }
+    }
+}
+
+private struct GatewayModifiers: ViewModifier {
+    @Binding var onboardingComplete: Bool
+    @Binding var hasConnectedOnce: Bool
+    let maybeAutoOpenSettings: () -> Void
+    let gatewayServerName: String?
+    
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: self.gatewayServerName) { _, newValue in
+                if newValue != nil {
+                    self.onboardingComplete = true
+                    self.hasConnectedOnce = true
+                }
+                self.maybeAutoOpenSettings()
+            }
+    }
+}
+
+private struct VoiceWakeModifiers: ViewModifier {
+    @Binding var voiceWakeToastText: String?
+    @Binding var toastDismissTask: Task<Void, Never>?
+    let lastTriggeredCommand: String?
+    
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: self.lastTriggeredCommand) { _, newValue in
+                guard let newValue else { return }
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+
+                self.toastDismissTask?.cancel()
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                    self.voiceWakeToastText = trimmed
+                }
+
+                self.toastDismissTask = Task {
+                    try? await Task.sleep(nanoseconds: 2_300_000_000)
+                    await MainActor.run {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            self.voiceWakeToastText = nil
+                        }
                     }
                 }
             }
