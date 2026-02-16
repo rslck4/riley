@@ -50,37 +50,10 @@ enum OpenClawChatTheme {
     @ViewBuilder
     static var background: some View {
         #if os(macOS)
-        ZStack {
-            Rectangle()
-                .fill(.ultraThinMaterial)
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.12),
-                    Color(nsColor: .windowBackgroundColor).opacity(0.35),
-                    Color.black.opacity(0.35),
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing)
-            RadialGradient(
-                colors: [
-                    Color(nsColor: .systemOrange).opacity(0.14),
-                    .clear,
-                ],
-                center: .topLeading,
-                startRadius: 40,
-                endRadius: 320)
-            RadialGradient(
-                colors: [
-                    Color(nsColor: .systemTeal).opacity(0.12),
-                    .clear,
-                ],
-                center: .topTrailing,
-                startRadius: 40,
-                endRadius: 280)
-            Color.black.opacity(0.08)
-        }
+        Color(nsColor: .windowBackgroundColor)
         #else
-        Color(uiColor: .systemBackground)
+        // Warm noir: near-black canvas (hsl(0 0% 4%))
+        Color(white: 0.04)
         #endif
     }
 
@@ -101,14 +74,21 @@ enum OpenClawChatTheme {
     }
 
     static var userBubble: Color {
-        Color(red: 127 / 255.0, green: 184 / 255.0, blue: 212 / 255.0)
+        // Warm noir design: primary/12 (blue accent at 12% opacity)
+        Color(hue: 215/360, saturation: 0.90, brightness: 0.60).opacity(0.12)
+    }
+    
+    static var primary: Color {
+        // Primary accent: hsl(215 90% 60%) - the sole accent color
+        Color(hue: 215/360, saturation: 0.90, brightness: 0.60)
     }
 
     static var assistantBubble: Color {
         #if os(macOS)
         Color(nsColor: self.assistantBubbleDynamicNSColor)
         #else
-        Color(uiColor: .secondarySystemBackground)
+        // Subtle card background: hsl(0 0% 7%)
+        Color(white: 0.07)
         #endif
     }
 
@@ -134,7 +114,8 @@ enum OpenClawChatTheme {
         #if os(macOS)
         Color(nsColor: .labelColor)
         #else
-        Color(uiColor: .label)
+        // Warm off-white: hsl(40 20% 88%)
+        Color(hue: 40/360, saturation: 0.20, brightness: 0.88)
         #endif
     }
 
@@ -142,7 +123,8 @@ enum OpenClawChatTheme {
         #if os(macOS)
         AnyShapeStyle(.ultraThinMaterial)
         #else
-        AnyShapeStyle(Color(uiColor: .systemBackground))
+        // Surface: hsl(0 0% 7%)
+        AnyShapeStyle(Color(white: 0.07))
         #endif
     }
 
@@ -150,16 +132,19 @@ enum OpenClawChatTheme {
         #if os(macOS)
         AnyShapeStyle(.thinMaterial)
         #else
-        AnyShapeStyle(Color(uiColor: .secondarySystemBackground))
+        // Input field: hsl(0 0% 8%)
+        AnyShapeStyle(Color(white: 0.08))
         #endif
     }
 
     static var composerBorder: Color {
-        Color.white.opacity(0.12)
+        // Border: hsl(0 0% 12%)
+        Color(white: 0.12)
     }
 
     static var divider: Color {
-        Color.secondary.opacity(0.2)
+        // Border: hsl(0 0% 12%)
+        Color(white: 0.12)
     }
 }
 

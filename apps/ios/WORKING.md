@@ -1,24 +1,34 @@
 # Working State
-Last updated: 2026-02-14 22:45
+Last updated: 2026-02-15 12:00
 
 ## Current Issue
-None - fixed gateway connection scope issue
+Runtime UI diagnosis — RESOLVED
 
 ## Status
-- ✅ Fixed "missing scope operator.write" error
-- ✅ Added "operator.write" to connection scopes
-- ✅ Build completed successfully
+- ✅ Build errors from 9034bfbd8 refactor fixed (commit 81eaf4c93)
+- ✅ Runtime diagnosis: app renders correctly in simulator
+- ✅ Diagnostic code added and removed (clean round-trip)
+- 🔄 Modern card-based chat UI (6 modified + 2 new files) — uncommitted, needs testing with live gateway
 
 ## Blocked
-Nothing
+Gateway not configured in simulator — chat sheet can't be tested without one
 
 ## Next Up
-Test the gateway connection to verify chat functionality works
+1. Connect a gateway in the simulator to test chat sheet rendering
+2. Verify Modern card UI (warm noir, collapsible tools, code blocks) renders correctly
+3. Commit Modern chat UI changes once verified
+4. Push to origin
 
 ## Context
-- Gateway was rejecting connections with "missing scope operator.write"
-- iOS app was connecting as role: "operator" with scopes: ["chat", "node", "operator.read"]
-- Gateway requires "operator.write" scope for chat.send and other write methods
-- Fixed by adding "operator.write" to scopes array in GatewayConnectionController:328
-- Recent commit 9034bfbd8 added NODE_ALLOWED_METHODS but app still connects as operator role
-- Also fixed TLS default to true (line 32) which caused initial connection failures
+### Runtime Diagnosis Result
+App is fully functional. Settings auto-opens because `hasConnectedOnce=false` and no gateway config exists. This is expected first-launch behavior. The chat button, talk button, settings button, and StatusPill all render correctly behind the Settings sheet.
+
+### Uncommitted Modern Chat UI Files
+- `ChatComposer.swift` — minor change
+- `ChatMessageViews.swift` — +191 lines (ModernUserMessageCard, etc.)
+- `ChatTheme.swift` — warm noir palette refactor
+- `ChatView.swift` — switched to Modern components (+66 lines)
+- `ChatViewModel.swift` — minor change
+- `ModernChatComponents.swift` — +286 lines (card system, code blocks, tool groups)
+- `ModernChatPreview.swift` — NEW (preview provider)
+- `DESIGN_SYSTEM.md` — NEW (design system documentation)

@@ -139,17 +139,32 @@ struct ChatMessageBubble: View {
     let style: OpenClawChatView.Style
     let markdownVariant: ChatMarkdownVariant
     let userAccent: Color?
+    @State private var showActions = false
 
     var body: some View {
-        ChatMessageBody(
-            message: self.message,
-            isUser: self.isUser,
-            style: self.style,
-            markdownVariant: self.markdownVariant,
-            userAccent: self.userAccent)
-            .frame(maxWidth: ChatUIConstants.bubbleMaxWidth, alignment: self.isUser ? .trailing : .leading)
-            .frame(maxWidth: .infinity, alignment: self.isUser ? .trailing : .leading)
-            .padding(.horizontal, 2)
+        VStack(alignment: self.isUser ? .trailing : .leading, spacing: 4) {
+            ChatMessageBody(
+                message: self.message,
+                isUser: self.isUser,
+                style: self.style,
+                markdownVariant: self.markdownVariant,
+                userAccent: self.userAccent)
+                .frame(maxWidth: ChatUIConstants.bubbleMaxWidth, alignment: self.isUser ? .trailing : .leading)
+            
+            if self.showActions {
+                MessageActionBar(
+                    message: self.message,
+                    isUser: self.isUser)
+                    .transition(.scale(scale: 0.9).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: self.isUser ? .trailing : .leading)
+        .padding(.horizontal, 2)
+        .onTapGesture {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                self.showActions.toggle()
+            }
+        }
     }
 
     private var isUser: Bool { self.message.role.lowercased() == "user" }
@@ -289,19 +304,17 @@ private struct ChatMessageBody: View {
     }
 
     private var bubbleBorderColor: Color {
-        if self.isUser {
-            return Color.white.opacity(0.12)
-        }
         if self.style == .onboarding {
             return OpenClawChatTheme.onboardingAssistantBorder
         }
-        return Color.white.opacity(0.08)
+        // Minimal borders - warm noir aesthetic uses subtle dividers
+        return OpenClawChatTheme.divider
     }
 
     private var bubbleBorderWidth: CGFloat {
-        if self.isUser { return 0.5 }
         if self.style == .onboarding { return 0.8 }
-        return 1
+        // Very subtle border
+        return 0.5
     }
 
     private var bubbleBorder: some View {
@@ -326,15 +339,25 @@ private struct ChatMessageBody: View {
     }
 
     private var bubbleShadowColor: Color {
-        self.style == .onboarding && !self.isUser ? Color.black.opacity(0.28) : .clear
+        if self.style == .onboarding && !self.isUser {
+            return Color.black.opacity(0.28)
+        }
+        // Minimal shadows - warm noir aesthetic
+        return .clear
     }
 
     private var bubbleShadowRadius: CGFloat {
-        self.style == .onboarding && !self.isUser ? 6 : 0
+        if self.style == .onboarding && !self.isUser {
+            return 6
+        }
+        return 0
     }
 
     private var bubbleShadowYOffset: CGFloat {
-        self.style == .onboarding && !self.isUser ? 2 : 0
+        if self.style == .onboarding && !self.isUser {
+            return 2
+        }
+        return 0
     }
 }
 
@@ -614,3 +637,135 @@ private struct ChatAssistantTextBody: View {
         }
     }
 }
+// MARK: - Message Action Bar
+
+@MainActor
+private struct MessageActionBar: View {
+    let message: OpenClawChatMessage
+    let isUser: Bool
+    @State private var copied = false
+    @State private var showEmojiPicker = false
+    
+    private let presetEmojis = ["👍", "❤️", "😂", "🔥", "👀"]
+    
+    var body: some View {
+        VStack(alignment: isUser ? .trailing : .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                // Copy button
+                Button(action: copyMessage) {
+                    HStack(spacing: 4) {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 11))
+                        Text(copied ? "Copied" : "Copy")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(copied ? OpenClawChatTheme.primary : Color.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color(white: 0.10))
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(OpenClawChatTheme.divider, lineWidth: 0.5)))
+                }
+                .buttonStyle(.plain)
+                
+                // Emoji reaction button
+                Button(action: { 
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+                        showEmojiPicker.toggle()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "face.smiling")
+                            .font(.system(size: 11))
+                        Text("React")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundStyle(showEmojiPicker ? OpenClawChatTheme.primary : Color.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color(white: 0.10))
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(OpenClawChatTheme.divider, lineWidth: 0.5)))
+                }
+                .buttonStyle(.plain)
+                
+                // Retry button (only for assistant messages)
+                if !isUser {
+                    Button(action: {}) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 11))
+                            Text("Retry")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(Color.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule()
+                                .fill(Color(white: 0.10))
+                                .overlay(
+                                    Capsule()
+                                        .strokeBorder(OpenClawChatTheme.divider, lineWidth: 0.5)))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            
+            // Emoji picker
+            if showEmojiPicker {
+                HStack(spacing: 8) {
+                    ForEach(presetEmojis, id: \.self) { emoji in
+                        Button(action: { reactWithEmoji(emoji) }) {
+                            Text(emoji)
+                                .font(.system(size: 20))
+                                .padding(6)
+                                .background(
+                                    Circle()
+                                        .fill(Color(white: 0.10))
+                                        .overlay(
+                                            Circle()
+                                                .strokeBorder(OpenClawChatTheme.divider, lineWidth: 0.5)))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+    
+    private func copyMessage() {
+        let text = message.content.compactMap { $0.text }.joined(separator: "\n")
+        #if os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #else
+        UIPasteboard.general.string = text
+        #endif
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            copied = false
+        }
+    }
+    
+    private func reactWithEmoji(_ emoji: String) {
+        // TODO: Implement reaction storage/display
+        // For now, just dismiss the picker with haptic feedback
+        #if !os(macOS)
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+        #endif
+        withAnimation(.spring(response: 0.25, dampingFraction: 0.75)) {
+            showEmojiPicker = false
+        }
+    }
+}
+

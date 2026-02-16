@@ -291,7 +291,7 @@ struct OpenClawChatComposer: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
                 .padding(6)
-                .background(Circle().fill(Color.accentColor))
+                .background(Circle().fill(OpenClawChatTheme.primary))
                 .disabled(!self.viewModel.canSend)
             }
         }

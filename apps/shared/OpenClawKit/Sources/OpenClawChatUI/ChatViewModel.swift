@@ -307,7 +307,9 @@ public final class OpenClawChatViewModel {
                 thinking: self.thinkingLevel,
                 idempotencyKey: runId,
                 attachments: encodedAttachments)
+            chatUILogger.info("chat.send response - sent runId: \(runId, privacy: .public), response runId: \(response.runId, privacy: .public)")
             if response.runId != runId {
+                chatUILogger.info("runId mismatch - swapping from \(runId, privacy: .public) to \(response.runId, privacy: .public)")
                 self.clearPendingRun(runId)
                 self.pendingRuns.insert(response.runId)
                 self.armPendingRunTimeout(runId: response.runId)
@@ -440,7 +442,8 @@ public final class OpenClawChatViewModel {
         // If we have a runId in the event, verify it's one we're tracking
         let runId = evt.runId
         guard self.pendingRuns.contains(runId) else {
-            chatUILogger.debug("Ignoring agent event for untracked runId: \(runId, privacy: .public)")
+            let pendingRunsList = Array(self.pendingRuns).joined(separator: ", ")
+            chatUILogger.debug("Ignoring agent event for untracked runId: \(runId, privacy: .public). Current pendingRuns: [\(pendingRunsList, privacy: .public)]")
             return
         }
 

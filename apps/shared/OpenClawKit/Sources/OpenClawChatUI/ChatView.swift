@@ -1,4 +1,5 @@
 import SwiftUI
+import OpenClawKit
 
 @MainActor
 public struct OpenClawChatView: View {
@@ -14,6 +15,7 @@ public struct OpenClawChatView: View {
     @State private var hasPerformedInitialScroll = false
     @State private var isPinnedToBottom = true
     @State private var lastUserMessageID: UUID?
+    @State private var scrollDebounceTask: Task<Void, Never>?
     private let showsSessionSwitcher: Bool
     private let style: Style
     private let markdownVariant: ChatMarkdownVariant
@@ -166,9 +168,16 @@ public struct OpenClawChatView: View {
             }
         }
         .onChange(of: self.viewModel.streamingAssistantText) { _, _ in
+            // Debounce scroll updates during streaming to prevent excessive layout recalculations.
+            // Only scroll after text stops updating for 100ms to batch updates.
             guard self.hasPerformedInitialScroll, self.isPinnedToBottom else { return }
-            withAnimation(.snappy(duration: 0.22)) {
-                self.scrollPosition = self.scrollerBottomID
+            self.scrollDebounceTask?.cancel()
+            self.scrollDebounceTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(100))
+                guard !Task.isCancelled else { return }
+                withAnimation(.snappy(duration: 0.22)) {
+                    self.scrollPosition = self.scrollerBottomID
+                }
             }
         }
     }
@@ -176,14 +185,8 @@ public struct OpenClawChatView: View {
     @ViewBuilder
     private var messageListRows: some View {
         ForEach(self.visibleMessages) { msg in
-            ChatMessageBubble(
-                message: msg,
-                style: self.style,
-                markdownVariant: self.markdownVariant,
-                userAccent: self.userAccent)
-                .frame(
-                    maxWidth: .infinity,
-                    alignment: msg.role.lowercased() == "user" ? .trailing : .leading)
+            ModernChatMessageCard(message: msg, markdownVariant: self.markdownVariant)
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
 
         if self.viewModel.pendingRunCount > 0 {
@@ -192,17 +195,30 @@ public struct OpenClawChatView: View {
                     .equatable()
                 Spacer(minLength: 0)
             }
+            .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
 
         if !self.viewModel.pendingToolCalls.isEmpty {
             ChatPendingToolsBubble(toolCalls: self.viewModel.pendingToolCalls)
                 .equatable()
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
 
         if let text = self.viewModel.streamingAssistantText, AssistantTextParser.hasVisibleContent(in: text) {
-            ChatStreamingAssistantBubble(text: text, markdownVariant: self.markdownVariant)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ModernStreamingAssistantCard(
+                text: text,
+                toolActivities: self.viewModel.pendingToolCalls.map { call in
+                    let display = ToolDisplayRegistry.resolve(name: call.name, args: call.args)
+                    return (
+                        toolName: display.label,
+                        summary: display.detailLine ?? "",
+                        details: nil,
+                        isComplete: false
+                    )
+                },
+                isStreaming: true)
+                .transition(.scale(scale: 0.9).combined(with: .opacity))
         }
     }
 
@@ -503,5 +519,31 @@ private struct ChatNoticeBanner: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)))
+    }
+}
+
+// MARK: - Modern Chat Message Card Adapter
+
+@MainActor
+private struct ModernChatMessageCard: View {
+    let message: OpenClawChatMessage
+    let markdownVariant: ChatMarkdownVariant
+    
+    private var isUser: Bool {
+        message.role.lowercased() == "user"
+    }
+    
+    private var messageText: String {
+        message.content.compactMap { $0.text }.joined(separator: "\n")
+    }
+    
+    var body: some View {
+        if isUser {
+            ModernUserMessageCard(text: messageText)
+        } else {
+            ModernMessageCard(isUser: false) {
+                ModernMessageContent(text: messageText)
+            }
+        }
     }
 }
