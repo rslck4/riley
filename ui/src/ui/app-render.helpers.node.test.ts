@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionsListResult } from "./types.ts";
-import { resolveSessionDisplayName } from "./app-render.helpers.ts";
+import { groupSessionOptions, resolveSessionDisplayName } from "./app-render.helpers.ts";
 
 type SessionRow = SessionsListResult["sessions"][number];
 
@@ -75,5 +75,22 @@ describe("resolveSessionDisplayName", () => {
     expect(resolveSessionDisplayName("k", row({ key: "k", displayName: "  My Chat  " }))).toBe(
       "My Chat (k)",
     );
+  });
+});
+
+describe("groupSessionOptions", () => {
+  it("returns groups in stable order and skips empty groups", () => {
+    const grouped = groupSessionOptions([
+      { key: "group-1", displayName: "Group 1", group: "group" },
+      { key: "main", displayName: "Main", group: "main" },
+      { key: "direct-1", displayName: "Direct 1", group: "direct" },
+      { key: "unknown-1", displayName: "Unknown 1", group: "unknown" },
+    ]);
+
+    expect(grouped.map((group) => group.id)).toEqual(["main", "direct", "group", "unknown"]);
+    expect(grouped[0]?.entries.map((entry) => entry.key)).toEqual(["main"]);
+    expect(grouped[1]?.entries.map((entry) => entry.key)).toEqual(["direct-1"]);
+    expect(grouped[2]?.entries.map((entry) => entry.key)).toEqual(["group-1"]);
+    expect(grouped[3]?.entries.map((entry) => entry.key)).toEqual(["unknown-1"]);
   });
 });
