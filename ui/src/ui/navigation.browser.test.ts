@@ -323,7 +323,6 @@ describe("control UI routing", () => {
     expect(filter!.value).toBe("");
     expect(app.chatNavigatorQuery).toBe("");
   });
-
   it("supports rename/delete chat navigator actions via existing session RPCs", async () => {
     const app = mountApp("/chat?session=project-x");
     await app.updateComplete;

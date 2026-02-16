@@ -484,7 +484,6 @@ async function removeChatSession(state: AppViewState, key: string) {
     selectChatSession(state, fallback);
   }
 }
-
 const THEME_ORDER: ThemeMode[] = ["system", "light", "dark"];
 
 export function renderThemeToggle(state: AppViewState) {
