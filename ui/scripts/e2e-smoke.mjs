@@ -57,6 +57,7 @@ try {
   const chatLink = page.getByRole("link", { name: "Chat" });
   await chatLink.click();
   await page.waitForURL(/\/(chat)?$/);
+  await page.getByLabel("Sessions").waitFor({ timeout: 20_000 });
 
   const chatInput = page.getByLabel("Message");
   const chatSendButton = page.getByRole("button", { name: /^Send$/ });
