@@ -4,7 +4,7 @@ import type { AppViewState } from "./app-view-state.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
 import type { SessionsListResult } from "./types.ts";
-import { refreshChat } from "./app-chat.ts";
+import { refreshChat, refreshChatAvatar } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
 import { OpenClawApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
@@ -40,6 +40,34 @@ export function renderTab(state: AppViewState, tab: Tab) {
       <span class="nav-item__text">${title}</span>
     </a>
   `;
+}
+
+export function selectChatSession(state: AppViewState, next: string) {
+  if (!next) {
+    return;
+  }
+  state.sessionKey = next;
+  state.chatMessage = "";
+  state.chatAttachments = [];
+  state.chatStream = null;
+  (state as unknown as OpenClawApp).chatStreamStartedAt = null;
+  state.chatRunId = null;
+  state.chatQueue = [];
+  (state as unknown as OpenClawApp).resetToolStream();
+  (state as unknown as OpenClawApp).resetChatScroll();
+  state.applySettings({
+    ...state.settings,
+    sessionKey: next,
+    lastActiveSessionKey: next,
+  });
+  syncUrlWithSessionKey(
+    state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],
+    next,
+    true,
+  );
+  void state.loadAssistantIdentity();
+  void loadChatHistory(state as unknown as ChatState);
+  void refreshChatAvatar(state as unknown as Parameters<typeof refreshChatAvatar>[0]);
 }
 
 export function renderChatControls(state: AppViewState) {
@@ -95,25 +123,7 @@ export function renderChatControls(state: AppViewState) {
           ?disabled=${!state.connected}
           @change=${(e: Event) => {
             const next = (e.target as HTMLSelectElement).value;
-            state.sessionKey = next;
-            state.chatMessage = "";
-            state.chatStream = null;
-            (state as unknown as OpenClawApp).chatStreamStartedAt = null;
-            state.chatRunId = null;
-            (state as unknown as OpenClawApp).resetToolStream();
-            (state as unknown as OpenClawApp).resetChatScroll();
-            state.applySettings({
-              ...state.settings,
-              sessionKey: next,
-              lastActiveSessionKey: next,
-            });
-            void state.loadAssistantIdentity();
-            syncUrlWithSessionKey(
-              state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],
-              next,
-              true,
-            );
-            void loadChatHistory(state as unknown as ChatState);
+            selectChatSession(state, next);
           }}
         >
           ${repeat(
@@ -194,6 +204,39 @@ export function renderChatControls(state: AppViewState) {
       >
         ${focusIcon}
       </button>
+    </div>
+  `;
+}
+
+export function renderChatNavigator(state: AppViewState) {
+  const mainSessionKey = resolveMainSessionKey(state.hello, state.sessionsResult);
+  const sessionOptions = resolveSessionOptions(
+    state.sessionKey,
+    state.sessionsResult,
+    mainSessionKey,
+  );
+  return html`
+    <div class="nav-group" data-testid="chat-navigator-group">
+      <div class="nav-label nav-label--static">
+        <span class="nav-label__text">Sessions</span>
+      </div>
+      <div class="nav-group__items" aria-label="Sessions">
+        ${sessionOptions.map((entry) => {
+          const selected = entry.key === state.sessionKey;
+          return html`
+            <button
+              class="nav-item ${selected ? "active" : ""}"
+              type="button"
+              aria-current=${selected ? "page" : "false"}
+              data-testid=${`session-row-${encodeURIComponent(entry.key)}`}
+              @click=${() => selectChatSession(state, entry.key)}
+            >
+              <span class="nav-item__icon" aria-hidden="true">${icons.fileText}</span>
+              <span class="nav-item__text">${entry.displayName ?? entry.key}</span>
+            </button>
+          `;
+        })}
+      </div>
     </div>
   `;
 }
