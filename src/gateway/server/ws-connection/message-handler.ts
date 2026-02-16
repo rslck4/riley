@@ -68,6 +68,39 @@ type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
 const DEVICE_SIGNATURE_SKEW_MS = 10 * 60 * 1000;
 
+function isFlagEnabled(value: string | undefined): boolean {
+  return value === "1" || value?.toLowerCase() === "true";
+}
+
+export function resolvePairingAutoApprovePolicy(params: {
+  nodeEnv: string | undefined;
+  e2eMode: string | undefined;
+  e2eAutoApprovePairing: string | undefined;
+  e2eAllowTailnet: string | undefined;
+  isLocalClient: boolean;
+  isLoopbackSocket: boolean;
+  isHostLocal: boolean;
+  isTailscaleRequest: boolean;
+}): { enabled: boolean; reason: string } {
+  if (params.nodeEnv === "production") {
+    return { enabled: false, reason: "disabled_in_production" };
+  }
+  const modeEnabled = isFlagEnabled(params.e2eMode) || params.nodeEnv === "test";
+  if (!modeEnabled) {
+    return { enabled: false, reason: "e2e_mode_disabled" };
+  }
+  if (!isFlagEnabled(params.e2eAutoApprovePairing)) {
+    return { enabled: false, reason: "pairing_flag_disabled" };
+  }
+  if (params.isLocalClient || params.isLoopbackSocket || params.isHostLocal) {
+    return { enabled: true, reason: "loopback_local" };
+  }
+  if (params.isTailscaleRequest && isFlagEnabled(params.e2eAllowTailnet)) {
+    return { enabled: true, reason: "tailnet_override" };
+  }
+  return { enabled: false, reason: "origin_not_allowed" };
+}
+
 export function attachGatewayWsMessageHandler(params: {
   socket: WebSocket;
   upgradeReq: IncomingMessage;
@@ -146,8 +179,41 @@ export function attachGatewayWsMessageHandler(params: {
   const hostName = resolveHostName(requestHost);
   const hostIsLocal = hostName === "localhost" || hostName === "127.0.0.1" || hostName === "::1";
   const hostIsTailscaleServe = hostName.endsWith(".ts.net");
+  const forwardedHostHeader = upgradeReq.headers["x-forwarded-host"];
+  const forwardedHost =
+    typeof forwardedHostHeader === "string"
+      ? forwardedHostHeader
+      : Array.isArray(forwardedHostHeader)
+        ? forwardedHostHeader[0]
+        : "";
+  const forwardedHostName = resolveHostName(forwardedHost);
+  const originHostName = (() => {
+    if (!requestOrigin) {
+      return "";
+    }
+    try {
+      return new URL(requestOrigin).hostname.toLowerCase();
+    } catch {
+      return "";
+    }
+  })();
+  const isTailscaleRequest =
+    hostIsTailscaleServe ||
+    forwardedHostName.endsWith(".ts.net") ||
+    originHostName.endsWith(".ts.net");
   const hostIsLocalish = hostIsLocal || hostIsTailscaleServe;
   const isLocalClient = isLocalDirectRequest(upgradeReq, trustedProxies);
+  const isLoopbackSocket = isLoopbackAddress(remoteAddr);
+  const pairingAutoApprove = resolvePairingAutoApprovePolicy({
+    nodeEnv: process.env.NODE_ENV,
+    e2eMode: process.env.E2E_MODE,
+    e2eAutoApprovePairing: process.env.E2E_AUTO_APPROVE_PAIRING,
+    e2eAllowTailnet: process.env.E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE,
+    isLocalClient,
+    isLoopbackSocket,
+    isHostLocal: hostIsLocal,
+    isTailscaleRequest,
+  });
   const reportedClientIp =
     isLocalClient || hasUntrustedProxyHeaders
       ? undefined
@@ -674,14 +740,25 @@ export function attachGatewayWsMessageHandler(params: {
               role,
               scopes,
               remoteIp: reportedClientIp,
-              silent: isLocalClient,
+              silent: pairingAutoApprove.enabled,
             });
             const context = buildRequestContext();
             if (pairing.request.silent === true) {
               const approved = await approveDevicePairing(pairing.request.requestId);
               if (approved) {
                 logGateway.info(
-                  `device pairing auto-approved device=${approved.device.deviceId} role=${approved.device.role ?? "unknown"}`,
+                  {
+                    deviceId: approved.device.deviceId,
+                    role: approved.device.role ?? "unknown",
+                    reason: pairingAutoApprove.reason,
+                    nodeEnv: process.env.NODE_ENV ?? "unset",
+                    e2eMode: process.env.E2E_MODE ?? "unset",
+                    e2eAutoApprovePairing: process.env.E2E_AUTO_APPROVE_PAIRING ?? "unset",
+                    e2eAllowTailnet: process.env.E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE ?? "unset",
+                    isLocalClient,
+                    isTailscaleRequest,
+                  },
+                  "device pairing auto-approved",
                 );
                 context.broadcast(
                   "device.pair.resolved",

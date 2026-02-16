@@ -27,6 +27,9 @@ apps/android/.cxx/
 *.bun-build
 apps/macos/.build/
 apps/shared/MoltbotKit/.build/
+apps/shared/OpenClawKit/.build/
+apps/shared/OpenClawKit/Package.resolved
+apps/shared/OpenClawKit/.swiftpm/**
 **/ModuleCache/
 bin/
 bin/clawdbot-mac
@@ -91,3 +94,5 @@ apps/shared/OpenClawKit/Package.resolved
 !.agent/workflows/
 /local/
 package-lock.json
+.secrets/
+.tmp/

@@ -1,0 +1,101 @@
+name: Tailnet Smoke
+
+on:
+  schedule:
+    - cron: "15 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  tailnet-smoke:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      issues: write
+    env:
+      CI: "true"
+      E2E_UI_BASE_URL: "https://doghouse.tail8dfdc0.ts.net/"
+      E2E_GATEWAY_URL: "wss://doghouse.tail8dfdc0.ts.net"
+      E2E_AUTH_TOKEN: ${{ secrets.E2E_AUTH_TOKEN }}
+      PLANNING_REPO_TOKEN: ${{ secrets.PLANNING_REPO_GH_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+
+      - name: Mask E2E token
+        run: |
+          if [ -n "${E2E_AUTH_TOKEN}" ]; then
+            echo "::add-mask::${E2E_AUTH_TOKEN}"
+          fi
+
+      - name: Run tailnet smoke (non-blocking)
+        id: smoke
+        run: |
+          set +e
+          if [ -z "${E2E_AUTH_TOKEN}" ]; then
+            echo "Missing E2E_AUTH_TOKEN" | tee /tmp/tailnet-smoke.log
+            echo "exit_code=2" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          pnpm test:e2e:smoke:tailnet 2>&1 | tee /tmp/tailnet-smoke.log
+          code=${PIPESTATUS[0]}
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Create or update rolling flake issue
+        if: steps.smoke.outputs.exit_code != '0'
+        env:
+          GH_TOKEN: ${{ env.PLANNING_REPO_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "PLANNING_REPO_GH_TOKEN not configured; skipping cross-repo issue update."
+            exit 0
+          fi
+
+          repo="rslck4/openclaw_ui_refresh"
+          signature_source="$(grep -E 'ERROR|Error|Timeout|timed out|failed|pairing required|unauthorized' /tmp/tailnet-smoke.log | head -n 20 | tr -d '\r' || true)"
+          if [ -z "$signature_source" ]; then
+            signature_source="tailnet-smoke-unknown-error"
+          fi
+          sig="$(printf '%s' "$signature_source" | shasum -a 256 | awk '{print $1}')"
+          short_sig="${sig:0:12}"
+          title="[tailnet-smoke:${short_sig}] Tailnet smoke flake"
+
+          existing_number="$(gh issue list --repo "$repo" --state open --search "$title in:title" --json number --jq '.[0].number' || true)"
+          body_file="$(mktemp)"
+          {
+            echo "Tailnet smoke failed with signature \\`${short_sig}\\`."
+            echo
+            echo "- Workflow: ${GITHUB_WORKFLOW}"
+            echo "- Run: https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            echo "- Exit code: ${{ steps.smoke.outputs.exit_code }}"
+            echo
+            echo "Failure excerpt:"
+            echo '```text'
+            tail -n 80 /tmp/tailnet-smoke.log
+            echo '```'
+            echo
+            echo "Policy: non-blocking unless repeated >=3 times or triage confirms regression."
+          } > "$body_file"
+
+          if [ -n "$existing_number" ] && [ "$existing_number" != "null" ]; then
+            gh issue comment "$existing_number" --repo "$repo" --body-file "$body_file"
+          else
+            gh issue create --repo "$repo" \
+              --title "$title" \
+              --label "integration-flake" \
+              --label "tailnet" \
+              --body-file "$body_file"
+          fi
+
+      - name: Final status
+        run: |
+          if [ "${{ steps.smoke.outputs.exit_code }}" != "0" ]; then
+            echo "Tailnet smoke failed but is non-blocking by policy."
+          else
+            echo "Tailnet smoke passed."
+          fi

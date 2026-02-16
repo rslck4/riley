@@ -1,0 +1,55 @@
+name: Control UI Gates
+
+on:
+  pull_request:
+    paths:
+      - "ui/**"
+      - "src/gateway/**"
+      - "scripts/e2e/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/control-ui-gates.yml"
+  workflow_dispatch:
+
+jobs:
+  contracts-ui:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+
+      - name: Run UI contract snapshots
+        run: pnpm test:contracts:ui
+
+  e2e-smoke-loopback:
+    needs: [contracts-ui]
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+      CI: "true"
+      E2E_MODE: "1"
+      E2E_AUTO_APPROVE_PAIRING: "1"
+      E2E_AUTH_TOKEN: ${{ secrets.E2E_AUTH_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Node environment
+        uses: ./.github/actions/setup-node-env
+
+      - name: Mask E2E token
+        run: |
+          if [ -z "${E2E_AUTH_TOKEN}" ]; then
+            echo "::error::Missing E2E_AUTH_TOKEN secret for loopback smoke job"
+            exit 1
+          fi
+          echo "::add-mask::${E2E_AUTH_TOKEN}"
+
+      - name: Run loopback smoke
+        run: pnpm test:e2e:smoke:loopback

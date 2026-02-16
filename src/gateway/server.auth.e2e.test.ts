@@ -62,6 +62,137 @@ function restoreGatewayToken(prevToken: string | undefined) {
   }
 }
 
+async function createFreshSignedDevice(params: {
+  token: string;
+  role?: string;
+  scopes?: string[];
+  clientId?: string;
+  clientMode?: string;
+}) {
+  const { randomUUID } = await import("node:crypto");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { loadOrCreateDeviceIdentity, publicKeyRawBase64UrlFromPem, signDevicePayload } =
+    await import("../infra/device-identity.js");
+
+  const role = params.role ?? "operator";
+  const scopes = params.scopes ?? ["operator.admin"];
+  const clientId = params.clientId ?? GATEWAY_CLIENT_NAMES.TEST;
+  const clientMode = params.clientMode ?? GATEWAY_CLIENT_MODES.TEST;
+
+  const identity = loadOrCreateDeviceIdentity(
+    path.join(os.tmpdir(), `openclaw-test-device-${randomUUID()}.json`),
+  );
+  const signedAtMs = Date.now();
+  const payload = buildDeviceAuthPayload({
+    deviceId: identity.deviceId,
+    clientId,
+    clientMode,
+    role,
+    scopes,
+    signedAtMs,
+    token: params.token ?? null,
+  });
+
+  return {
+    id: identity.deviceId,
+    publicKey: publicKeyRawBase64UrlFromPem(identity.publicKeyPem),
+    signature: signDevicePayload(identity.privateKeyPem, payload),
+    signedAt: signedAtMs,
+  };
+}
+
+type E2EEnvSnapshot = {
+  E2E_MODE?: string;
+  E2E_AUTO_APPROVE_PAIRING?: string;
+  E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE?: string;
+  NODE_ENV?: string;
+};
+
+function snapshotE2EEnv(): E2EEnvSnapshot {
+  return {
+    E2E_MODE: process.env.E2E_MODE,
+    E2E_AUTO_APPROVE_PAIRING: process.env.E2E_AUTO_APPROVE_PAIRING,
+    E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE: process.env.E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE,
+    NODE_ENV: process.env.NODE_ENV,
+  };
+}
+
+function restoreE2EEnv(snapshot: E2EEnvSnapshot) {
+  for (const [key, value] of Object.entries(snapshot)) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
+const TEST_OPERATOR_CLIENT = {
+  id: GATEWAY_CLIENT_NAMES.TEST,
+  version: "1.0.0",
+  platform: "test",
+  mode: GATEWAY_CLIENT_MODES.TEST,
+};
+
+function resolveGatewayTokenOrEnv(): string {
+  const token =
+    typeof (testState.gatewayAuth as { token?: unknown } | undefined)?.token === "string"
+      ? ((testState.gatewayAuth as { token?: string }).token ?? undefined)
+      : process.env.OPENCLAW_GATEWAY_TOKEN;
+  expect(typeof token).toBe("string");
+  return String(token ?? "");
+}
+
+async function approvePendingPairingIfNeeded() {
+  const { approveDevicePairing, listDevicePairing } = await import("../infra/device-pairing.js");
+  const list = await listDevicePairing();
+  const pending = list.pending.at(0);
+  expect(pending?.requestId).toBeDefined();
+  if (pending?.requestId) {
+    await approveDevicePairing(pending.requestId);
+  }
+}
+
+function isConnectResMessage(id: string) {
+  return (o: unknown) => {
+    if (!o || typeof o !== "object" || Array.isArray(o)) {
+      return false;
+    }
+    const rec = o as Record<string, unknown>;
+    return rec.type === "res" && rec.id === id;
+  };
+}
+
+async function sendRawConnectReq(
+  ws: WebSocket,
+  params: {
+    id: string;
+    token?: string;
+    device: { id: string; publicKey: string; signature: string; signedAt: number; nonce?: string };
+  },
+) {
+  ws.send(
+    JSON.stringify({
+      type: "req",
+      id: params.id,
+      method: "connect",
+      params: {
+        minProtocol: PROTOCOL_VERSION,
+        maxProtocol: PROTOCOL_VERSION,
+        client: TEST_OPERATOR_CLIENT,
+        caps: [],
+        role: "operator",
+        auth: params.token ? { token: params.token } : undefined,
+        device: params.device,
+      },
+    }),
+  );
+  return onceMessage<{ ok: boolean; payload?: unknown; error?: { message?: string } }>(
+    ws,
+    isConnectResMessage(params.id),
+  );
+}
 async function startRateLimitedTokenServerWithPairedDeviceToken() {
   const { loadOrCreateDeviceIdentity } = await import("../infra/device-identity.js");
   const { approveDevicePairing, getPairedDevice, listDevicePairing } =
@@ -555,6 +686,73 @@ describe("gateway server auth/connect", () => {
       const health = await rpcReq(ws, "health");
       expect(health.ok).toBe(false);
       expect(health.error?.message).toContain("missing scope");
+      ws.close();
+    });
+  });
+
+  describe("pairing auto-approve env gates", () => {
+    let server: Awaited<ReturnType<typeof startGatewayServer>> | null = null;
+    let port = 0;
+    let envSnapshot: E2EEnvSnapshot;
+
+    beforeEach(async () => {
+      testState.gatewayAuth = { mode: "token", token: "secret", allowTailscale: true };
+      envSnapshot = snapshotE2EEnv();
+      delete process.env.E2E_MODE;
+      delete process.env.E2E_AUTO_APPROVE_PAIRING;
+      delete process.env.E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE;
+      process.env.NODE_ENV = "test";
+      testTailscaleWhois.value = { login: "peter", name: "Peter" };
+      port = await getFreePort();
+      server = await startGatewayServer(port);
+    });
+
+    afterEach(async () => {
+      if (server) {
+        await server.close();
+      }
+      server = null;
+      testTailscaleWhois.value = null;
+      restoreE2EEnv(envSnapshot);
+    });
+
+    test("keeps pairing disabled by default without explicit flags", async () => {
+      const ws = await openWs(port);
+      const res = await connectReq(ws, {
+        token: "secret",
+        device: await createFreshSignedDevice({ token: "secret" }),
+      });
+      expect(res.ok).toBe(false);
+      expect(res.error?.message ?? "").toContain("pairing required");
+      ws.close();
+    });
+
+    test("auto-approves loopback pairing only when explicit E2E flags are set", async () => {
+      process.env.E2E_MODE = "1";
+      process.env.E2E_AUTO_APPROVE_PAIRING = "1";
+      const ws = await openWs(port);
+      const res = await connectReq(ws, {
+        token: "secret",
+        device: await createFreshSignedDevice({ token: "secret" }),
+      });
+      if (!res.ok) {
+        throw new Error(`expected auto-approve success, got: ${res.error?.message ?? "unknown"}`);
+      }
+      expect(res.ok).toBe(true);
+      ws.close();
+    });
+
+    test("blocks auto-approve in production even when E2E flags are set", async () => {
+      process.env.NODE_ENV = "production";
+      process.env.E2E_MODE = "1";
+      process.env.E2E_AUTO_APPROVE_PAIRING = "1";
+      const ws = await openWs(port);
+      const res = await connectReq(ws, {
+        token: "secret",
+        device: await createFreshSignedDevice({ token: "secret" }),
+      });
+      expect(res.ok).toBe(false);
+      expect(res.error?.message ?? "").toContain("pairing required");
       ws.close();
     });
   });
