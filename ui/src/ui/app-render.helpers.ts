@@ -8,6 +8,7 @@ import { refreshChat, refreshChatAvatar } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
 import { OpenClawApp } from "./app.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
+import { deleteSession, patchSession } from "./controllers/sessions.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 
@@ -271,16 +272,45 @@ export function renderChatNavigator(state: AppViewState) {
             ${group.entries.map((entry) => {
               const selected = entry.key === state.sessionKey;
               return html`
-                <button
-                  class="nav-item ${selected ? "active" : ""}"
-                  type="button"
-                  aria-current=${selected ? "page" : "false"}
-                  data-testid=${`session-row-${encodeURIComponent(entry.key)}`}
-                  @click=${() => selectChatSession(state, entry.key)}
-                >
-                  <span class="nav-item__icon" aria-hidden="true">${icons.fileText}</span>
-                  <span class="nav-item__text">${entry.displayName ?? entry.key}</span>
-                </button>
+                <div class="chat-session-row">
+                  <button
+                    class="nav-item ${selected ? "active" : ""}"
+                    type="button"
+                    aria-current=${selected ? "page" : "false"}
+                    data-testid=${`session-row-${encodeURIComponent(entry.key)}`}
+                    @click=${() => selectChatSession(state, entry.key)}
+                  >
+                    <span class="nav-item__icon" aria-hidden="true">${icons.fileText}</span>
+                    <span class="nav-item__text">${entry.displayName ?? entry.key}</span>
+                  </button>
+                  <div class="chat-session-row__actions">
+                    <button
+                      class="btn btn--sm"
+                      type="button"
+                      aria-label=${`Rename session ${entry.key}`}
+                      data-testid=${`session-rename-${encodeURIComponent(entry.key)}`}
+                      @click=${(event: MouseEvent) => {
+                        event.stopPropagation();
+                        void renameChatSession(state, entry.key);
+                      }}
+                    >
+                      Rename
+                    </button>
+                    <button
+                      class="btn btn--sm"
+                      type="button"
+                      aria-label=${`Delete session ${entry.key}`}
+                      data-testid=${`session-delete-${encodeURIComponent(entry.key)}`}
+                      ?disabled=${entry.group === "main" || state.sessionsLoading}
+                      @click=${(event: MouseEvent) => {
+                        event.stopPropagation();
+                        void removeChatSession(state, entry.key);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
               `;
             })}
           </div>
@@ -428,6 +458,31 @@ export function filterSessionOptions(
     const displayName = option.displayName?.toLowerCase() ?? "";
     return key.includes(normalized) || displayName.includes(normalized);
   });
+}
+
+async function renameChatSession(state: AppViewState, key: string) {
+  const label = window.prompt(`Rename session "${key}"`, "")?.trim();
+  if (label === undefined) {
+    return;
+  }
+  await patchSession(state as unknown as Parameters<typeof patchSession>[0], key, {
+    label: label.length ? label : null,
+  });
+}
+
+async function removeChatSession(state: AppViewState, key: string) {
+  const deletingCurrent = state.sessionKey === key;
+  await deleteSession(state as unknown as Parameters<typeof deleteSession>[0], key);
+  if (!deletingCurrent || state.sessionKey !== key) {
+    return;
+  }
+  const mainSessionKey = resolveMainSessionKey(state.hello, state.sessionsResult);
+  const firstAvailable = state.sessionsResult?.sessions.find((row) => row.key !== key)?.key;
+  const fallback =
+    (mainSessionKey && mainSessionKey !== key ? mainSessionKey : null) ?? firstAvailable;
+  if (fallback) {
+    selectChatSession(state, fallback);
+  }
 }
 
 const THEME_ORDER: ThemeMode[] = ["system", "light", "dark"];
