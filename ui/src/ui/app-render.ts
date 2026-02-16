@@ -54,6 +54,7 @@ import { icons } from "./icons.ts";
 import {
   iconForTab,
   normalizeBasePath,
+  OPS_RAIL_TABS,
   pathForTab,
   TAB_GROUPS,
   subtitleForTab,
@@ -107,9 +108,10 @@ export function renderApp(state: AppViewState) {
     state.configForm ?? (state.configSnapshot?.config as Record<string, unknown> | null);
   const basePath = normalizeBasePath(state.basePath ?? "");
   const railTabs = TAB_GROUPS.flatMap((group) => group.tabs);
-  const chatFirstRailTabs = [
+  const prioritizedRailTabs = [
     "chat",
-    ...railTabs.filter((tab) => tab !== "chat"),
+    ...OPS_RAIL_TABS,
+    ...railTabs.filter((tab) => tab !== "chat" && !OPS_RAIL_TABS.includes(tab)),
   ] as typeof railTabs;
   const resolvedAgentId =
     state.agentsSelectedId ??
@@ -154,7 +156,7 @@ export function renderApp(state: AppViewState) {
       </header>
       <div class="shell-body">
         <aside class="rail" aria-label="Primary navigation" data-testid="primary-nav-rail">
-          ${chatFirstRailTabs.map((tab) => {
+          ${prioritizedRailTabs.map((tab) => {
             const href = pathForTab(tab, state.basePath);
             const isChatTab = tab === "chat";
             const title = titleForTab(tab);
@@ -187,10 +189,14 @@ export function renderApp(state: AppViewState) {
         </aside>
         <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
           ${TAB_GROUPS.map((group) => {
+            const groupId = group.label.toLowerCase().replace(/\s+/g, "-");
             const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
             const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
             return html`
-              <div class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}">
+              <div
+                class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}"
+                data-testid=${`nav-group-${groupId}`}
+              >
                 <button
                   class="nav-label"
                   @click=${() => {
@@ -201,7 +207,9 @@ export function renderApp(state: AppViewState) {
                       navGroupsCollapsed: next,
                     });
                   }}
+                  aria-label=${`${group.label} navigation group`}
                   aria-expanded=${!isGroupCollapsed}
+                  data-testid=${`nav-group-toggle-${groupId}`}
                 >
                   <span class="nav-label__text">${group.label}</span>
                   <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>

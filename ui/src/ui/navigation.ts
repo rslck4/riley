@@ -2,13 +2,25 @@ import type { IconName } from "./icons.js";
 
 export const TAB_GROUPS = [
   { label: "Chat", tabs: ["chat"] },
+  { label: "Ops", tabs: ["sessions", "usage", "cron", "logs", "config"] },
   {
     label: "Control",
-    tabs: ["overview", "channels", "instances", "sessions", "usage", "cron"],
+    tabs: ["overview", "channels", "instances"],
   },
   { label: "Agent", tabs: ["agents", "skills", "nodes"] },
-  { label: "Settings", tabs: ["config", "debug", "logs"] },
+  { label: "Advanced", tabs: ["debug"] },
 ] as const;
+
+export const OPS_RAIL_TABS: ReadonlyArray<Tab> = [
+  "sessions",
+  "usage",
+  "cron",
+  "logs",
+  "config",
+  "overview",
+  "channels",
+  "instances",
+];
 
 export type Tab =
   | "agents"
