@@ -239,6 +239,10 @@
   background: var(--accent-subtle);
 }
 
+.rail-item--chat-primary {
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
 .rail-item__icon {
   width: 18px;
   height: 18px;

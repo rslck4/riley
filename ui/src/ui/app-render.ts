@@ -107,6 +107,10 @@ export function renderApp(state: AppViewState) {
     state.configForm ?? (state.configSnapshot?.config as Record<string, unknown> | null);
   const basePath = normalizeBasePath(state.basePath ?? "");
   const railTabs = TAB_GROUPS.flatMap((group) => group.tabs);
+  const chatFirstRailTabs = [
+    "chat",
+    ...railTabs.filter((tab) => tab !== "chat"),
+  ] as typeof railTabs;
   const resolvedAgentId =
     state.agentsSelectedId ??
     state.agentsList?.defaultId ??
@@ -149,13 +153,15 @@ export function renderApp(state: AppViewState) {
         </div>
       </header>
       <div class="shell-body">
-        <aside class="rail" aria-label="Primary navigation">
-          ${railTabs.map((tab) => {
+        <aside class="rail" aria-label="Primary navigation" data-testid="primary-nav-rail">
+          ${chatFirstRailTabs.map((tab) => {
             const href = pathForTab(tab, state.basePath);
+            const isChatTab = tab === "chat";
+            const title = titleForTab(tab);
             return html`
               <a
                 href=${href}
-                class="rail-item ${state.tab === tab ? "active" : ""}"
+                class="rail-item ${state.tab === tab ? "active" : ""} ${isChatTab ? "rail-item--chat-primary" : ""}"
                 @click=${(event: MouseEvent) => {
                   if (
                     event.defaultPrevented ||
@@ -170,8 +176,9 @@ export function renderApp(state: AppViewState) {
                   event.preventDefault();
                   state.setTab(tab);
                 }}
-                title=${titleForTab(tab)}
-                aria-label=${titleForTab(tab)}
+                title=${isChatTab ? `${title} (primary)` : title}
+                aria-label=${isChatTab ? `${title} (primary)` : title}
+                data-testid=${`primary-nav-${tab}`}
               >
                 <span class="rail-item__icon" aria-hidden="true">${icons[iconForTab(tab)]}</span>
               </a>
@@ -223,7 +230,11 @@ export function renderApp(state: AppViewState) {
             </div>
           </div>
         </aside>
-        <main class="content ${isChat ? "content--chat" : ""}">
+        <main
+          class="content ${isChat ? "content--chat" : ""}"
+          aria-label=${`Active view: ${titleForTab(state.tab)}`}
+          data-testid=${`active-view-${state.tab}`}
+        >
         <section class="content-header">
           <div>
             ${state.tab === "usage" ? nothing : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
