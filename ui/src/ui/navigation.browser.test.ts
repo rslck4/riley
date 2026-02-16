@@ -392,4 +392,32 @@ describe("control UI routing", () => {
     expect(app.sessionKey).toBe("main");
     expect(window.location.search).toBe("?session=main");
   });
+
+  it("renders inspector skeleton tabs and toggles panels in chat sidebar", async () => {
+    const app = mountApp("/chat?session=main");
+    await app.updateComplete;
+
+    app.sidebarOpen = true;
+    app.sidebarContent = "tool output";
+    app.inspectorTab = "tools";
+    await app.updateComplete;
+
+    const detailsTab = app.querySelector<HTMLButtonElement>(
+      '[data-testid="inspector-tab-details"]',
+    );
+    expect(detailsTab).not.toBeNull();
+    detailsTab?.click();
+    await app.updateComplete;
+
+    expect(app.inspectorTab).toBe("details");
+    expect(app.querySelector('[data-testid="inspector-details-panel"]')).not.toBeNull();
+
+    const debugTab = app.querySelector<HTMLButtonElement>('[data-testid="inspector-tab-debug"]');
+    expect(debugTab).not.toBeNull();
+    debugTab?.click();
+    await app.updateComplete;
+
+    expect(app.inspectorTab).toBe("debug");
+    expect(app.querySelector('[data-testid="inspector-debug-panel"]')).not.toBeNull();
+  });
 });

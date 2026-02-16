@@ -71,6 +71,7 @@ export type AppViewState = {
   sidebarOpen: boolean;
   sidebarContent: string | null;
   sidebarError: string | null;
+  inspectorTab: import("./types.js").InspectorTab;
   splitRatio: number;
   scrollToBottom: (opts?: { smooth?: boolean }) => void;
   devicesLoading: boolean;

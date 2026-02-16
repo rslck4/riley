@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
-import type { SessionsListResult } from "../types.ts";
+import type { InspectorTab, SessionsListResult } from "../types.ts";
 import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
 import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
 import {
@@ -48,6 +48,7 @@ export type ChatProps = {
   sidebarOpen?: boolean;
   sidebarContent?: string | null;
   sidebarError?: string | null;
+  inspectorTab?: InspectorTab;
   splitRatio?: number;
   assistantName: string;
   assistantAvatar: string | null;
@@ -67,6 +68,7 @@ export type ChatProps = {
   onNewSession: () => void;
   onOpenSidebar?: (content: string) => void;
   onCloseSidebar?: () => void;
+  onInspectorTabChange?: (tab: InspectorTab) => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
 };
@@ -207,6 +209,7 @@ export function renderChat(props: ChatProps) {
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
+  const inspectorTab = props.inspectorTab ?? "tools";
   const thread = html`
     <div
       class="chat-thread"
@@ -303,17 +306,62 @@ export function renderChat(props: ChatProps) {
                 @resize=${(e: CustomEvent) => props.onSplitRatioChange?.(e.detail.splitRatio)}
               ></resizable-divider>
               <div class="chat-sidebar">
-                ${renderMarkdownSidebar({
-                  content: props.sidebarContent ?? null,
-                  error: props.sidebarError ?? null,
-                  onClose: props.onCloseSidebar!,
-                  onViewRawText: () => {
-                    if (!props.sidebarContent || !props.onOpenSidebar) {
-                      return;
-                    }
-                    props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
-                  },
-                })}
+                <div class="inspector-tabs" role="tablist" aria-label="Inspector tabs">
+                  ${(["tools", "details", "debug"] as const).map(
+                    (tab) => html`
+                      <button
+                        class="inspector-tab ${inspectorTab === tab ? "active" : ""}"
+                        type="button"
+                        role="tab"
+                        aria-selected=${inspectorTab === tab}
+                        aria-label=${`Inspector ${tab} tab`}
+                        data-testid=${`inspector-tab-${tab}`}
+                        @click=${() => props.onInspectorTabChange?.(tab)}
+                      >
+                        ${tab[0]?.toUpperCase()}${tab.slice(1)}
+                      </button>
+                    `,
+                  )}
+                </div>
+                ${
+                  inspectorTab === "tools"
+                    ? renderMarkdownSidebar({
+                        content: props.sidebarContent ?? null,
+                        error: props.sidebarError ?? null,
+                        onClose: props.onCloseSidebar!,
+                        onViewRawText: () => {
+                          if (!props.sidebarContent || !props.onOpenSidebar) {
+                            return;
+                          }
+                          props.onOpenSidebar(`\`\`\`\n${props.sidebarContent}\n\`\`\``);
+                        },
+                      })
+                    : nothing
+                }
+                ${
+                  inspectorTab === "details"
+                    ? html`
+                        <section class="card inspector-panel" data-testid="inspector-details-panel">
+                          <h3>Details</h3>
+                          <div class="muted">Session metadata panel ships in the next PR.</div>
+                          <div class="inspector-kv">
+                            <span class="muted">Session</span>
+                            <code>${props.sessionKey}</code>
+                          </div>
+                        </section>
+                      `
+                    : nothing
+                }
+                ${
+                  inspectorTab === "debug"
+                    ? html`
+                        <section class="card inspector-panel" data-testid="inspector-debug-panel">
+                          <h3>Debug</h3>
+                          <div class="muted">Technical trace panel scaffold is ready for Phase 2 follow-up.</div>
+                        </section>
+                      `
+                    : nothing
+                }
               </div>
             `
             : nothing

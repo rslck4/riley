@@ -141,6 +141,7 @@ export class OpenClawApp extends LitElement {
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
   @state() sidebarError: string | null = null;
+  @state() inspectorTab: import("./types.js").InspectorTab = "tools";
   @state() splitRatio = this.settings.splitRatio;
 
   @state() nodesLoading = false;
