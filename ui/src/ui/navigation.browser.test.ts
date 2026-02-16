@@ -190,4 +190,40 @@ describe("control UI routing", () => {
     expect(window.location.pathname).toBe("/ui/overview");
     expect(window.location.hash).toBe("");
   });
+
+  it("defaults root landing to chat and restores last active session", async () => {
+    localStorage.setItem(
+      "openclaw.control.settings.v1",
+      JSON.stringify({
+        sessionKey: "main",
+        lastActiveSessionKey: "project-x",
+      }),
+    );
+
+    const app = mountApp("/");
+    await app.updateComplete;
+
+    expect(app.tab).toBe("chat");
+    expect(app.sessionKey).toBe("project-x");
+    expect(window.location.pathname).toBe("/chat");
+    expect(window.location.search).toBe("?session=project-x");
+  });
+
+  it("keeps explicit session query over last active fallback", async () => {
+    localStorage.setItem(
+      "openclaw.control.settings.v1",
+      JSON.stringify({
+        sessionKey: "main",
+        lastActiveSessionKey: "project-x",
+      }),
+    );
+
+    const app = mountApp("/chat?session=explicit-y");
+    await app.updateComplete;
+
+    expect(app.tab).toBe("chat");
+    expect(app.sessionKey).toBe("explicit-y");
+    expect(window.location.pathname).toBe("/chat");
+    expect(window.location.search).toBe("?session=explicit-y");
+  });
 });
