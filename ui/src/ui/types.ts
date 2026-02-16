@@ -404,6 +404,8 @@ export type GatewaySessionRow = {
 
 export type SessionOriginGroup = "main" | "direct" | "group" | "global" | "unknown";
 
+export type InspectorTab = "tools" | "details" | "debug";
+
 export type SessionsListResult = {
   ts: number;
   path: string;

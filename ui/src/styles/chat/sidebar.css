@@ -94,6 +94,48 @@
   font-size: 13px;
 }
 
+.inspector-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.inspector-tab {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.inspector-tab.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.inspector-panel {
+  margin: 12px;
+  padding: 12px;
+}
+
+.inspector-panel h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.inspector-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 12px;
+}
+
 /* Mobile: Full-screen modal */
 @media (max-width: 768px) {
   .chat-split-container--open {
