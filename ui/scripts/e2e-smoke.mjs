@@ -31,6 +31,19 @@ await context.addInitScript((settings) => {
 
 const page = await context.newPage();
 
+async function requestGateway(method, params = {}) {
+  return await page.evaluate(
+    async ({ method, params }) => {
+      const app = document.querySelector("openclaw-app");
+      if (!app || !("client" in app) || !app.client) {
+        throw new Error("openclaw-app client is not ready");
+      }
+      return await app.client.request(method, params);
+    },
+    { method, params },
+  );
+}
+
 try {
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
 
@@ -45,6 +58,29 @@ try {
   await chatLink.click();
   await page.waitForURL(/\/(chat)?$/);
 
+  const chatInput = page.getByLabel("Message");
+  const chatSendButton = page.getByRole("button", { name: /^Send$/ });
+  const seededMessage = `smoke-seed-${Date.now()}`;
+  await chatInput.fill(seededMessage);
+  await chatSendButton.click();
+  await page.getByText(seededMessage).waitFor({ timeout: 20_000 });
+
+  const injectedMessage = `smoke-injected-${Date.now()}`;
+  await requestGateway("chat.inject", {
+    sessionKey: "main",
+    label: "e2e-smoke",
+    message: injectedMessage,
+  });
+  await page.getByText(injectedMessage).waitFor({ timeout: 20_000 });
+
+  await chatInput.fill(`smoke-abort-${Date.now()}`);
+  await chatSendButton.click();
+  const abortRes = await requestGateway("chat.abort", { sessionKey: "main" });
+  if (!abortRes || abortRes.ok !== true) {
+    throw new Error("chat.abort failed in smoke run");
+  }
+  await page.getByRole("button", { name: /Send|Queue/ }).waitFor({ timeout: 20_000 });
+
   // Mobile sanity: shell should still render and nav can be toggled.
   await page.setViewportSize({ width: 390, height: 844 });
   const collapseButton = page.getByRole("button", { name: /collapse sidebar|expand sidebar/i });
@@ -53,7 +89,9 @@ try {
     timeout: 10_000,
   });
 
-  console.log("UI smoke passed: connect/auth, navigation, and mobile sanity.");
+  console.log(
+    "UI smoke passed: connect/auth, chat send/final/abort, navigation, and mobile sanity.",
+  );
 } finally {
   await context.close();
   await browser.close();
