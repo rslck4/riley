@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SessionsListResult } from "./types.ts";
 import { OpenClawApp } from "./app.ts";
 import "../styles.css";
 
@@ -321,5 +322,74 @@ describe("control UI routing", () => {
     await app.updateComplete;
     expect(filter!.value).toBe("");
     expect(app.chatNavigatorQuery).toBe("");
+  });
+  it("supports rename/delete chat navigator actions via existing session RPCs", async () => {
+    const app = mountApp("/chat?session=project-x");
+    await app.updateComplete;
+
+    const requests: Array<{ method: string; params: Record<string, unknown> }> = [];
+    let sessions: SessionsListResult["sessions"] = [
+      { key: "main", kind: "direct", updatedAt: Date.now() },
+      { key: "project-x", kind: "direct", updatedAt: Date.now() },
+    ];
+
+    app.connected = true;
+    app.client = {
+      request: async (method: string, params: Record<string, unknown>) => {
+        requests.push({ method, params });
+        if (method === "sessions.patch") {
+          return { ok: true };
+        }
+        if (method === "sessions.delete") {
+          sessions = sessions.filter((session) => session.key !== params.key);
+          return { ok: true };
+        }
+        if (method === "sessions.list") {
+          return {
+            ts: Date.now(),
+            path: "~/.openclaw/sessions.json",
+            count: sessions.length,
+            defaults: { model: null, contextTokens: null },
+            sessions,
+          };
+        }
+        return undefined;
+      },
+    } as OpenClawApp["client"];
+
+    app.sessionsResult = {
+      ts: Date.now(),
+      path: "~/.openclaw/sessions.json",
+      count: sessions.length,
+      defaults: { model: null, contextTokens: null },
+      sessions,
+    };
+    await app.updateComplete;
+
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("Project X");
+    const renameButton = app.querySelector<HTMLButtonElement>(
+      `[data-testid="session-rename-${encodeURIComponent("project-x")}"]`,
+    );
+    expect(renameButton).not.toBeNull();
+    renameButton?.click();
+    await Promise.resolve();
+    await app.updateComplete;
+    promptSpy.mockRestore();
+
+    expect(requests.some((request) => request.method === "sessions.patch")).toBe(true);
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const deleteButton = app.querySelector<HTMLButtonElement>(
+      `[data-testid="session-delete-${encodeURIComponent("project-x")}"]`,
+    );
+    expect(deleteButton).not.toBeNull();
+    deleteButton?.click();
+    await Promise.resolve();
+    await app.updateComplete;
+    confirmSpy.mockRestore();
+
+    expect(requests.some((request) => request.method === "sessions.delete")).toBe(true);
+    expect(app.sessionKey).toBe("main");
+    expect(window.location.search).toBe("?session=main");
   });
 });
