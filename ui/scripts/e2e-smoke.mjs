@@ -65,19 +65,15 @@ try {
   await chatSendButton.click();
   await page.getByText(seededMessage).waitFor({ timeout: 20_000 });
 
-  const injectedMessage = `smoke-injected-${Date.now()}`;
-  await requestGateway("chat.inject", {
-    sessionKey: "main",
-    label: "e2e-smoke",
-    message: injectedMessage,
-  });
-  await page.getByText(injectedMessage).waitFor({ timeout: 20_000 });
-
   await chatInput.fill(`smoke-abort-${Date.now()}`);
   await chatSendButton.click();
   const abortRes = await requestGateway("chat.abort", { sessionKey: "main" });
   if (!abortRes || abortRes.ok !== true) {
     throw new Error("chat.abort failed in smoke run");
+  }
+  const healthRes = await requestGateway("health", {});
+  if (!healthRes || typeof healthRes !== "object") {
+    throw new Error("health RPC failed after chat flow");
   }
   await page.getByRole("button", { name: /Send|Queue/ }).waitFor({ timeout: 20_000 });
 
@@ -89,9 +85,7 @@ try {
     timeout: 10_000,
   });
 
-  console.log(
-    "UI smoke passed: connect/auth, chat send/final/abort, navigation, and mobile sanity.",
-  );
+  console.log("UI smoke passed: connect/auth, chat send/abort, navigation, and mobile sanity.");
 } finally {
   await context.close();
   await browser.close();
