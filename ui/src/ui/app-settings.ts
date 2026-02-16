@@ -318,6 +318,19 @@ export function syncTabWithLocation(host: SettingsHost, replace: boolean) {
     return;
   }
   const resolved = tabFromPath(window.location.pathname, host.basePath) ?? "chat";
+  const url = new URL(window.location.href);
+  const hasExplicitSession = Boolean(url.searchParams.get("session")?.trim());
+  if (resolved === "chat" && !hasExplicitSession) {
+    const fallbackSession = host.settings.lastActiveSessionKey?.trim();
+    if (fallbackSession && host.sessionKey !== fallbackSession) {
+      host.sessionKey = fallbackSession;
+      applySettings(host, {
+        ...host.settings,
+        sessionKey: fallbackSession,
+        lastActiveSessionKey: fallbackSession,
+      });
+    }
+  }
   setTabFromRoute(host, resolved);
   syncUrlWithTab(host, resolved, replace);
 }
