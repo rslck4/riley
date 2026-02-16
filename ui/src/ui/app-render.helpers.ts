@@ -13,6 +13,7 @@ import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 
 export function renderTab(state: AppViewState, tab: Tab) {
   const href = pathForTab(tab, state.basePath);
+  const title = titleForTab(tab);
   return html`
     <a
       href=${href}
@@ -31,10 +32,12 @@ export function renderTab(state: AppViewState, tab: Tab) {
         event.preventDefault();
         state.setTab(tab);
       }}
-      title=${titleForTab(tab)}
+      title=${title}
+      aria-label=${title}
+      data-testid=${`secondary-nav-${tab}`}
     >
       <span class="nav-item__icon" aria-hidden="true">${icons[iconForTab(tab)]}</span>
-      <span class="nav-item__text">${titleForTab(tab)}</span>
+      <span class="nav-item__text">${title}</span>
     </a>
   `;
 }
