@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import type { AppViewState } from "./app-view-state.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
@@ -210,17 +210,53 @@ export function renderChatControls(state: AppViewState) {
 
 export function renderChatNavigator(state: AppViewState) {
   const mainSessionKey = resolveMainSessionKey(state.hello, state.sessionsResult);
-  const sessionOptions = resolveSessionOptions(
+  const allSessionOptions = resolveSessionOptions(
     state.sessionKey,
     state.sessionsResult,
     mainSessionKey,
   );
+  const sessionOptions = filterSessionOptions(allSessionOptions, state.chatNavigatorQuery);
   const groupedSessionOptions = groupSessionOptions(sessionOptions);
+  const firstSessionKey = sessionOptions[0]?.key;
   return html`
     <div class="nav-group" data-testid="chat-navigator-group">
       <div class="nav-label nav-label--static">
         <span class="nav-label__text">Sessions</span>
       </div>
+      <label class="field field--search">
+        <input
+          type="search"
+          class="search-input"
+          placeholder="Filter sessions"
+          aria-label="Filter sessions"
+          data-testid="chat-navigator-filter"
+          .value=${state.chatNavigatorQuery}
+          @input=${(event: Event) => {
+            state.chatNavigatorQuery = (event.target as HTMLInputElement).value;
+          }}
+          @keydown=${(event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              state.chatNavigatorQuery = "";
+              (event.target as HTMLInputElement).value = "";
+              return;
+            }
+            if (event.key === "Enter" && firstSessionKey) {
+              event.preventDefault();
+              selectChatSession(state, firstSessionKey);
+            }
+          }}
+        />
+      </label>
+      ${
+        sessionOptions.length === 0
+          ? html`
+              <div class="nav-group__items" aria-label="Filtered sessions">
+                <div class="status-line">No sessions match this filter.</div>
+              </div>
+            `
+          : nothing
+      }
       ${groupedSessionOptions.map(
         (group) => html`
         <div
@@ -377,6 +413,21 @@ export function groupSessionOptions(
       entries: options.filter((option) => option.group === groupId),
     }))
     .filter((group) => group.entries.length > 0);
+}
+
+export function filterSessionOptions(
+  options: Array<{ key: string; displayName?: string; group: SessionOriginGroup }>,
+  query: string,
+) {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return options;
+  }
+  return options.filter((option) => {
+    const key = option.key.toLowerCase();
+    const displayName = option.displayName?.toLowerCase() ?? "";
+    return key.includes(normalized) || displayName.includes(normalized);
+  });
 }
 
 const THEME_ORDER: ThemeMode[] = ["system", "light", "dark"];
