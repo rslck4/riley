@@ -746,20 +746,17 @@ export function attachGatewayWsMessageHandler(params: {
             if (pairing.request.silent === true) {
               const approved = await approveDevicePairing(pairing.request.requestId);
               if (approved) {
-                logGateway.info(
-                  {
-                    deviceId: approved.device.deviceId,
-                    role: approved.device.role ?? "unknown",
-                    reason: pairingAutoApprove.reason,
-                    nodeEnv: process.env.NODE_ENV ?? "unset",
-                    e2eMode: process.env.E2E_MODE ?? "unset",
-                    e2eAutoApprovePairing: process.env.E2E_AUTO_APPROVE_PAIRING ?? "unset",
-                    e2eAllowTailnet: process.env.E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE ?? "unset",
-                    isLocalClient,
-                    isTailscaleRequest,
-                  },
-                  "device pairing auto-approved",
-                );
+                logGateway.info("device pairing auto-approved", {
+                  deviceId: approved.device.deviceId,
+                  role: approved.device.role ?? "unknown",
+                  reason: pairingAutoApprove.reason,
+                  nodeEnv: process.env.NODE_ENV ?? "unset",
+                  e2eMode: process.env.E2E_MODE ?? "unset",
+                  e2eAutoApprovePairing: process.env.E2E_AUTO_APPROVE_PAIRING ?? "unset",
+                  e2eAllowTailnet: process.env.E2E_ALLOW_TAILNET_PAIRING_AUTOAPPROVE ?? "unset",
+                  isLocalClient,
+                  isTailscaleRequest,
+                });
                 context.broadcast(
                   "device.pair.resolved",
                   {
