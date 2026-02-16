@@ -402,6 +402,8 @@ export type GatewaySessionRow = {
   contextTokens?: number;
 };
 
+export type SessionOriginGroup = "main" | "direct" | "group" | "global" | "unknown";
+
 export type SessionsListResult = {
   ts: number;
   path: string;

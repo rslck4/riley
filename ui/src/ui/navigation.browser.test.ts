@@ -262,4 +262,26 @@ describe("control UI routing", () => {
     expect(app.sessionKey).toBe("explicit-y");
     expect(window.location.search).toBe("?session=explicit-y");
   });
+
+  it("renders chat navigator session groups from existing metadata", async () => {
+    const app = mountApp("/chat?session=main");
+    await app.updateComplete;
+
+    app.sessionsResult = {
+      ts: Date.now(),
+      path: "~/.openclaw/sessions.json",
+      count: 3,
+      defaults: { model: null, contextTokens: null },
+      sessions: [
+        { key: "main", kind: "direct", updatedAt: Date.now() },
+        { key: "team-room", kind: "group", updatedAt: Date.now() },
+        { key: "global-feed", kind: "global", updatedAt: Date.now() },
+      ],
+    };
+    await app.updateComplete;
+
+    expect(app.querySelector('[data-testid="session-group-main"]')).not.toBeNull();
+    expect(app.querySelector('[data-testid="session-group-group"]')).not.toBeNull();
+    expect(app.querySelector('[data-testid="session-group-global"]')).not.toBeNull();
+  });
 });

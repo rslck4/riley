@@ -3,7 +3,7 @@ import { repeat } from "lit/directives/repeat.js";
 import type { AppViewState } from "./app-view-state.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
-import type { SessionsListResult } from "./types.ts";
+import type { SessionOriginGroup, SessionsListResult } from "./types.ts";
 import { refreshChat, refreshChatAvatar } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
 import { OpenClawApp } from "./app.ts";
@@ -215,28 +215,42 @@ export function renderChatNavigator(state: AppViewState) {
     state.sessionsResult,
     mainSessionKey,
   );
+  const groupedSessionOptions = groupSessionOptions(sessionOptions);
   return html`
     <div class="nav-group" data-testid="chat-navigator-group">
       <div class="nav-label nav-label--static">
         <span class="nav-label__text">Sessions</span>
       </div>
-      <div class="nav-group__items" aria-label="Sessions">
-        ${sessionOptions.map((entry) => {
-          const selected = entry.key === state.sessionKey;
-          return html`
-            <button
-              class="nav-item ${selected ? "active" : ""}"
-              type="button"
-              aria-current=${selected ? "page" : "false"}
-              data-testid=${`session-row-${encodeURIComponent(entry.key)}`}
-              @click=${() => selectChatSession(state, entry.key)}
-            >
-              <span class="nav-item__icon" aria-hidden="true">${icons.fileText}</span>
-              <span class="nav-item__text">${entry.displayName ?? entry.key}</span>
-            </button>
-          `;
-        })}
-      </div>
+      ${groupedSessionOptions.map(
+        (group) => html`
+        <div
+          class="chat-navigator-group"
+          data-testid=${`session-group-${group.id}`}
+          aria-label=${`${group.label} sessions`}
+        >
+          <div class="nav-label nav-label--static">
+            <span class="nav-label__text">${group.label}</span>
+          </div>
+          <div class="nav-group__items" aria-label=${`${group.label} sessions`}>
+            ${group.entries.map((entry) => {
+              const selected = entry.key === state.sessionKey;
+              return html`
+                <button
+                  class="nav-item ${selected ? "active" : ""}"
+                  type="button"
+                  aria-current=${selected ? "page" : "false"}
+                  data-testid=${`session-row-${encodeURIComponent(entry.key)}`}
+                  @click=${() => selectChatSession(state, entry.key)}
+                >
+                  <span class="nav-item__icon" aria-hidden="true">${icons.fileText}</span>
+                  <span class="nav-item__text">${entry.displayName ?? entry.key}</span>
+                </button>
+              `;
+            })}
+          </div>
+        </div>
+      `,
+      )}
     </div>
   `;
 }
@@ -286,7 +300,7 @@ function resolveSessionOptions(
   mainSessionKey?: string | null,
 ) {
   const seen = new Set<string>();
-  const options: Array<{ key: string; displayName?: string }> = [];
+  const options: Array<{ key: string; displayName?: string; group: SessionOriginGroup }> = [];
 
   const resolvedMain = mainSessionKey && sessions?.sessions?.find((s) => s.key === mainSessionKey);
   const resolvedCurrent = sessions?.sessions?.find((s) => s.key === sessionKey);
@@ -297,6 +311,7 @@ function resolveSessionOptions(
     options.push({
       key: mainSessionKey,
       displayName: resolveSessionDisplayName(mainSessionKey, resolvedMain || undefined),
+      group: "main",
     });
   }
 
@@ -306,6 +321,7 @@ function resolveSessionOptions(
     options.push({
       key: sessionKey,
       displayName: resolveSessionDisplayName(sessionKey, resolvedCurrent),
+      group: resolveSessionOriginGroup(sessionKey, resolvedCurrent, mainSessionKey),
     });
   }
 
@@ -317,12 +333,50 @@ function resolveSessionOptions(
         options.push({
           key: s.key,
           displayName: resolveSessionDisplayName(s.key, s),
+          group: resolveSessionOriginGroup(s.key, s, mainSessionKey),
         });
       }
     }
   }
 
   return options;
+}
+
+function resolveSessionOriginGroup(
+  key: string,
+  row?: SessionsListResult["sessions"][number],
+  mainSessionKey?: string | null,
+): SessionOriginGroup {
+  if (mainSessionKey && key === mainSessionKey) {
+    return "main";
+  }
+  if (!row) {
+    return "direct";
+  }
+  if (row.kind === "group" || row.kind === "global" || row.kind === "unknown") {
+    return row.kind;
+  }
+  return "direct";
+}
+
+export function groupSessionOptions(
+  options: Array<{ key: string; displayName?: string; group: SessionOriginGroup }>,
+) {
+  const groupOrder: SessionOriginGroup[] = ["main", "direct", "group", "global", "unknown"];
+  const labels: Record<SessionOriginGroup, string> = {
+    main: "Primary",
+    direct: "Direct",
+    group: "Group",
+    global: "Global",
+    unknown: "Other",
+  };
+  return groupOrder
+    .map((groupId) => ({
+      id: groupId,
+      label: labels[groupId],
+      entries: options.filter((option) => option.group === groupId),
+    }))
+    .filter((group) => group.entries.length > 0);
 }
 
 const THEME_ORDER: ThemeMode[] = ["system", "light", "dark"];
