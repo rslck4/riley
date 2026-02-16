@@ -5,20 +5,20 @@
 .shell {
   --shell-pad: 16px;
   --shell-gap: 16px;
+  --shell-rail-width: 64px;
   --shell-nav-width: 220px;
   --shell-topbar-height: 56px;
   --shell-focus-duration: 200ms;
   --shell-focus-ease: var(--ease-out);
   height: 100vh;
   display: grid;
-  grid-template-columns: var(--shell-nav-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--shell-topbar-height) 1fr;
   grid-template-areas:
-    "topbar topbar"
-    "nav content";
+    "topbar"
+    "body";
   gap: 0;
   animation: dashboard-enter 0.4s var(--ease-out);
-  transition: grid-template-columns var(--shell-focus-duration) var(--shell-focus-ease);
   overflow: hidden;
 }
 
@@ -40,14 +40,6 @@
   }
 }
 
-.shell--nav-collapsed {
-  grid-template-columns: 0px minmax(0, 1fr);
-}
-
-.shell--chat-focus {
-  grid-template-columns: 0px minmax(0, 1fr);
-}
-
 .shell--onboarding {
   grid-template-rows: 0 1fr;
 }
@@ -66,6 +58,22 @@
 
 .shell--chat-focus .content > * + * {
   margin-top: 0;
+}
+
+.shell-body {
+  grid-area: body;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--shell-rail-width) var(--shell-nav-width) minmax(0, 1fr);
+  transition: grid-template-columns var(--shell-focus-duration) var(--shell-focus-ease);
+}
+
+.shell--nav-collapsed .shell-body {
+  grid-template-columns: var(--shell-rail-width) 0 minmax(0, 1fr);
+}
+
+.shell--chat-focus .shell-body {
+  grid-template-columns: 0 0 minmax(0, 1fr);
 }
 
 /* ===========================================
@@ -191,11 +199,69 @@
 }
 
 /* ===========================================
+   Icon Rail
+   =========================================== */
+
+.rail {
+  border-right: 1px solid var(--border);
+  padding: 12px 10px;
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 8px;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.rail-item {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid transparent;
+  transition:
+    border-color var(--duration-fast) ease,
+    background var(--duration-fast) ease,
+    color var(--duration-fast) ease;
+}
+
+.rail-item:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+  text-decoration: none;
+}
+
+.rail-item.active {
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
+
+.rail-item__icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rail-item__icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ===========================================
    Navigation Sidebar
    =========================================== */
 
 .nav {
-  grid-area: nav;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 16px 12px;
@@ -570,11 +636,18 @@
     --shell-pad: 12px;
     --shell-gap: 12px;
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto 1fr;
     grid-template-areas:
       "topbar"
-      "nav"
-      "content";
+      "body";
+  }
+
+  .shell-body {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    display: none;
   }
 
   .nav {
