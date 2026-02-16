@@ -284,4 +284,42 @@ describe("control UI routing", () => {
     expect(app.querySelector('[data-testid="session-group-group"]')).not.toBeNull();
     expect(app.querySelector('[data-testid="session-group-global"]')).not.toBeNull();
   });
+
+  it("filters chat navigator sessions locally and supports Enter/Escape keyboard flow", async () => {
+    const app = mountApp("/chat?session=main");
+    await app.updateComplete;
+
+    app.sessionsResult = {
+      ts: Date.now(),
+      path: "~/.openclaw/sessions.json",
+      count: 2,
+      defaults: { model: null, contextTokens: null },
+      sessions: [
+        { key: "main", kind: "direct", updatedAt: Date.now() },
+        { key: "project-x", kind: "direct", updatedAt: Date.now() },
+      ],
+    };
+    await app.updateComplete;
+
+    const filter = app.querySelector<HTMLInputElement>('[data-testid="chat-navigator-filter"]');
+    expect(filter).not.toBeNull();
+    filter!.value = "project";
+    filter!.dispatchEvent(new Event("input", { bubbles: true }));
+    await app.updateComplete;
+
+    const projectRow = app.querySelector<HTMLButtonElement>(
+      `[data-testid="session-row-${encodeURIComponent("project-x")}"]`,
+    );
+    expect(projectRow).not.toBeNull();
+
+    filter!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await app.updateComplete;
+    expect(app.sessionKey).toBe("project-x");
+    expect(window.location.search).toBe("?session=project-x");
+
+    filter!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await app.updateComplete;
+    expect(filter!.value).toBe("");
+    expect(app.chatNavigatorQuery).toBe("");
+  });
 });

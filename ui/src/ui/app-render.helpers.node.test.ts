@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { SessionsListResult } from "./types.ts";
-import { groupSessionOptions, resolveSessionDisplayName } from "./app-render.helpers.ts";
+import {
+  filterSessionOptions,
+  groupSessionOptions,
+  resolveSessionDisplayName,
+} from "./app-render.helpers.ts";
 
 type SessionRow = SessionsListResult["sessions"][number];
 
@@ -92,5 +96,34 @@ describe("groupSessionOptions", () => {
     expect(grouped[1]?.entries.map((entry) => entry.key)).toEqual(["direct-1"]);
     expect(grouped[2]?.entries.map((entry) => entry.key)).toEqual(["group-1"]);
     expect(grouped[3]?.entries.map((entry) => entry.key)).toEqual(["unknown-1"]);
+  });
+});
+
+describe("filterSessionOptions", () => {
+  const options = [
+    { key: "main", displayName: "Main", group: "main" as const },
+    {
+      key: "discord:123:456",
+      displayName: "Discord Room (discord:123:456)",
+      group: "group" as const,
+    },
+    {
+      key: "agent:project-x",
+      displayName: "Project X (agent:project-x)",
+      group: "direct" as const,
+    },
+  ];
+
+  it("returns all options when query is empty", () => {
+    expect(filterSessionOptions(options, "")).toHaveLength(3);
+  });
+
+  it("filters by key and display name case-insensitively", () => {
+    expect(filterSessionOptions(options, "project").map((entry) => entry.key)).toEqual([
+      "agent:project-x",
+    ]);
+    expect(filterSessionOptions(options, "DISCORD").map((entry) => entry.key)).toEqual([
+      "discord:123:456",
+    ]);
   });
 });
