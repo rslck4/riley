@@ -1,0 +1,46 @@
+# Pinned RPC contract fixture v1.
+# Do not edit in place. Create rpc-methods.v2.txt (or newer) and link a planning
+# repo type:decision issue when contract changes are intentional.
+
+agent.identity.get
+agents.files.get
+agents.files.list
+agents.files.set
+agents.list
+channels.logout
+channels.status
+chat.abort
+chat.send
+config.apply
+config.get
+config.schema
+config.set
+connect
+cron.add
+cron.remove
+cron.run
+cron.status
+cron.update
+device.pair.approve
+device.pair.reject
+device.token.revoke
+exec.approval.resolve
+health
+last-heartbeat
+logs.tail
+models.list
+sessions.delete
+sessions.list
+sessions.patch
+sessions.usage
+sessions.usage.logs
+sessions.usage.timeseries
+skills.install
+skills.status
+skills.update
+status
+system-presence
+update.run
+usage.cost
+web.login.start
+web.login.wait
