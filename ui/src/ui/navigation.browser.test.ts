@@ -226,4 +226,40 @@ describe("control UI routing", () => {
     expect(window.location.pathname).toBe("/chat");
     expect(window.location.search).toBe("?session=explicit-y");
   });
+
+  it("marks deep-linked session row active in chat navigator", async () => {
+    const app = mountApp("/chat?session=explicit-y");
+    await app.updateComplete;
+
+    const encoded = encodeURIComponent("explicit-y");
+    const row = app.querySelector<HTMLButtonElement>(`[data-testid="session-row-${encoded}"]`);
+    expect(row).not.toBeNull();
+    expect(row?.getAttribute("aria-current")).toBe("page");
+  });
+
+  it("updates ?session when selecting a chat navigator session row", async () => {
+    const app = mountApp("/chat?session=main");
+    await app.updateComplete;
+
+    app.sessionsResult = {
+      ts: Date.now(),
+      path: "~/.openclaw/sessions.json",
+      count: 2,
+      defaults: { model: null, contextTokens: null },
+      sessions: [
+        { key: "main", kind: "direct", updatedAt: Date.now() },
+        { key: "explicit-y", kind: "direct", updatedAt: Date.now() },
+      ],
+    };
+    await app.updateComplete;
+
+    const encoded = encodeURIComponent("explicit-y");
+    const row = app.querySelector<HTMLButtonElement>(`[data-testid="session-row-${encoded}"]`);
+    expect(row).not.toBeNull();
+    row?.click();
+
+    await app.updateComplete;
+    expect(app.sessionKey).toBe("explicit-y");
+    expect(window.location.search).toBe("?session=explicit-y");
+  });
 });

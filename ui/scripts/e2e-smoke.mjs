@@ -58,6 +58,13 @@ try {
   await chatLink.click();
   await page.waitForURL(/\/(chat)?$/);
   await page.getByLabel("Sessions").waitFor({ timeout: 20_000 });
+  const activeSessionRow = page.getByTestId("session-row-main");
+  await activeSessionRow.waitFor({ timeout: 20_000 });
+  const activeSessionCurrent = await activeSessionRow.getAttribute("aria-current");
+  if (activeSessionCurrent !== "page") {
+    throw new Error("chat navigator did not mark session-row-main as active");
+  }
+  await page.getByLabel("Sessions").waitFor({ timeout: 20_000 });
 
   const chatInput = page.getByLabel("Message");
   const chatSendButton = page.getByRole("button", { name: /^Send$/ });
