@@ -31,16 +31,16 @@ await context.addInitScript((settings) => {
 
 const page = await context.newPage();
 
-async function requestGateway(method, params = {}) {
+async function requestGateway(rpcMethod, rpcParams = {}) {
   return await page.evaluate(
-    async ({ method, params }) => {
+    async ({ rpcMethod, rpcParams }) => {
       const app = document.querySelector("openclaw-app");
       if (!app || !("client" in app) || !app.client) {
         throw new Error("openclaw-app client is not ready");
       }
-      return await app.client.request(method, params);
+      return await app.client.request(rpcMethod, rpcParams);
     },
-    { method, params },
+    { rpcMethod, rpcParams },
   );
 }
 
