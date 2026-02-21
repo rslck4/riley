@@ -401,6 +401,12 @@ describe("control UI routing", () => {
     app.sidebarContent = "tool output";
     app.inspectorTab = "tools";
     await app.updateComplete;
+    expect(app.querySelector('[data-testid="inspector-tools-panel"]')).not.toBeNull();
+    expect(
+      app
+        .querySelector('[data-testid="inspector-tools-markdown"]')
+        ?.textContent?.includes("tool output"),
+    ).toBe(true);
 
     const detailsTab = app.querySelector<HTMLButtonElement>(
       '[data-testid="inspector-tab-details"]',

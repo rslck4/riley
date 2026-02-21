@@ -95,6 +95,12 @@ try {
     app.sidebarContent = "e2e inspector seed";
   });
   await page.getByTestId("inspector-tab-tools").waitFor({ timeout: 20_000 });
+  await page.getByTestId("inspector-tools-panel").waitFor({ timeout: 20_000 });
+  await page.getByTestId("inspector-tools-markdown").waitFor({ timeout: 20_000 });
+  const toolsText = await page.getByTestId("inspector-tools-markdown").textContent();
+  if (!(toolsText ?? "").includes("e2e inspector seed")) {
+    throw new Error("inspector tools tab did not render seeded tool output");
+  }
   await page.getByTestId("inspector-tab-details").click();
   await page.getByTestId("inspector-details-panel").waitFor({ timeout: 20_000 });
   const detailsSessionKey = await page.getByTestId("inspector-details-session-key").textContent();
