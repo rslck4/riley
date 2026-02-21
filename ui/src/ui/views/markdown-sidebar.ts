@@ -12,7 +12,11 @@ export type MarkdownSidebarProps = {
 
 export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
   return html`
-    <div class="sidebar-panel">
+    <div
+      class="sidebar-panel"
+      data-testid="inspector-tools-panel"
+      aria-label="Inspector tools output"
+    >
       <div class="sidebar-header">
         <div class="sidebar-title">Tool Output</div>
         <button @click=${props.onClose} class="btn" title="Close sidebar">
@@ -23,15 +27,19 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
         ${
           props.error
             ? html`
-              <div class="callout danger">${props.error}</div>
+              <div class="callout danger" data-testid="inspector-tools-error">${props.error}</div>
               <button @click=${props.onViewRawText} class="btn" style="margin-top: 12px;">
                 View Raw Text
               </button>
             `
             : props.content
-              ? html`<div class="sidebar-markdown">${unsafeHTML(toSanitizedMarkdownHtml(props.content))}</div>`
+              ? html`
+                  <div class="sidebar-markdown" data-testid="inspector-tools-markdown">
+                    ${unsafeHTML(toSanitizedMarkdownHtml(props.content))}
+                  </div>
+                `
               : html`
-                  <div class="muted">No content available</div>
+                  <div class="muted" data-testid="inspector-tools-empty">No tool output yet</div>
                 `
         }
       </div>
