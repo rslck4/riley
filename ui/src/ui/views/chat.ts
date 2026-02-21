@@ -1,9 +1,7 @@
 import { html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
-import type { InspectorTab, SessionsListResult } from "../types.ts";
-import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
-import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
+import { parseAgentSessionKey } from "../../../../src/routing/session-key.js";
 import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
@@ -12,6 +10,9 @@ import {
 import { normalizeMessage, normalizeRoleForGrouping } from "../chat/message-normalizer.ts";
 import { icons } from "../icons.ts";
 import { detectTextDirection } from "../text-direction.ts";
+import type { InspectorTab, SessionsListResult } from "../types.ts";
+import type { ChatItem, MessageGroup } from "../types/chat-types.ts";
+import type { ChatAttachment, ChatQueueItem } from "../ui-types.ts";
 import { renderMarkdownSidebar } from "./markdown-sidebar.ts";
 import "../components/resizable-divider.ts";
 
@@ -51,6 +52,7 @@ export type ChatProps = {
   inspectorTab?: InspectorTab;
   splitRatio?: number;
   assistantName: string;
+  assistantAgentId?: string | null;
   assistantAvatar: string | null;
   // Image attachments
   attachments?: ChatAttachment[];
@@ -193,6 +195,13 @@ export function renderChat(props: ChatProps) {
   const isBusy = props.sending || props.stream !== null;
   const canAbort = Boolean(props.canAbort && props.onAbort);
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
+  const parsedSessionKey = parseAgentSessionKey(props.sessionKey);
+  const sessionAgentId = parsedSessionKey?.agentId ?? props.assistantAgentId ?? "main";
+  const sessionUpdatedAt =
+    typeof activeSession?.updatedAt === "number" && activeSession.updatedAt > 0
+      ? new Date(activeSession.updatedAt).toLocaleString()
+      : "n/a";
+  const sessionCreatedAt = "n/a";
   const reasoningLevel = activeSession?.reasoningLevel ?? "off";
   const showReasoning = props.showThinking && reasoningLevel !== "off";
   const assistantIdentity = {
@@ -343,10 +352,50 @@ export function renderChat(props: ChatProps) {
                     ? html`
                         <section class="card inspector-panel" data-testid="inspector-details-panel">
                           <h3>Details</h3>
-                          <div class="muted">Session metadata panel ships in the next PR.</div>
                           <div class="inspector-kv">
                             <span class="muted">Session</span>
-                            <code>${props.sessionKey}</code>
+                            <div class="inspector-inline">
+                              <code data-testid="inspector-details-session-key">${props.sessionKey}</code>
+                              <button
+                                class="btn btn--sm"
+                                type="button"
+                                aria-label="Copy session key"
+                                data-testid="inspector-details-copy-session-key"
+                                @click=${async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(props.sessionKey);
+                                  } catch {
+                                    // Clipboard API can be unavailable in restricted browser contexts.
+                                  }
+                                }}
+                              >
+                                Copy
+                              </button>
+                            </div>
+                          </div>
+                          <div class="inspector-kv">
+                            <span class="muted">Agent</span>
+                            <code data-testid="inspector-details-agent-id">${sessionAgentId}</code>
+                          </div>
+                          <div class="inspector-kv">
+                            <span class="muted">Created</span>
+                            <span data-testid="inspector-details-created-at">${sessionCreatedAt}</span>
+                          </div>
+                          <div class="inspector-kv">
+                            <span class="muted">Updated</span>
+                            <span data-testid="inspector-details-updated-at">${sessionUpdatedAt}</span>
+                          </div>
+                          <div class="inspector-kv">
+                            <span class="muted">Channel</span>
+                            <span data-testid="inspector-details-channel">${activeSession?.surface ?? "n/a"}</span>
+                          </div>
+                          <div class="inspector-kv">
+                            <span class="muted">Provider</span>
+                            <span data-testid="inspector-details-provider">${activeSession?.modelProvider ?? "n/a"}</span>
+                          </div>
+                          <div class="inspector-kv">
+                            <span class="muted">Model</span>
+                            <span data-testid="inspector-details-model">${activeSession?.model ?? "n/a"}</span>
                           </div>
                         </section>
                       `
