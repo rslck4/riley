@@ -33,14 +33,14 @@ const page = await context.newPage();
 
 async function requestGateway(rpcMethod, rpcParams = {}) {
   return await page.evaluate(
-    async ({ rpcMethod, rpcParams }) => {
+    async ({ methodName, methodParams }) => {
       const app = document.querySelector("openclaw-app");
       if (!app || !("client" in app) || !app.client) {
         throw new Error("openclaw-app client is not ready");
       }
-      return await app.client.request(rpcMethod, rpcParams);
+      return await app.client.request(methodName, methodParams);
     },
-    { rpcMethod, rpcParams },
+    { methodName: rpcMethod, methodParams: rpcParams },
   );
 }
 
