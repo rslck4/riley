@@ -31,16 +31,16 @@ await context.addInitScript((settings) => {
 
 const page = await context.newPage();
 
-async function requestGateway(method, params = {}) {
+async function requestGateway(rpcMethod, rpcParams = {}) {
   return await page.evaluate(
-    async ({ method, params }) => {
+    async ({ methodName, methodParams }) => {
       const app = document.querySelector("openclaw-app");
       if (!app || !("client" in app) || !app.client) {
         throw new Error("openclaw-app client is not ready");
       }
-      return await app.client.request(method, params);
+      return await app.client.request(methodName, methodParams);
     },
-    { method, params },
+    { methodName: rpcMethod, methodParams: rpcParams },
   );
 }
 
@@ -84,6 +84,23 @@ try {
     throw new Error("health RPC failed after chat flow");
   }
   await page.getByRole("button", { name: /Send|Queue/ }).waitFor({ timeout: 20_000 });
+
+  // Inspector details tab should reflect the active deep-link session.
+  await page.evaluate(() => {
+    const app = document.querySelector("openclaw-app");
+    if (!app) {
+      throw new Error("openclaw-app missing while opening inspector");
+    }
+    app.sidebarOpen = true;
+    app.sidebarContent = "e2e inspector seed";
+  });
+  await page.getByTestId("inspector-tab-tools").waitFor({ timeout: 20_000 });
+  await page.getByTestId("inspector-tab-details").click();
+  await page.getByTestId("inspector-details-panel").waitFor({ timeout: 20_000 });
+  const detailsSessionKey = await page.getByTestId("inspector-details-session-key").textContent();
+  if ((detailsSessionKey ?? "").trim() !== "main") {
+    throw new Error("inspector details session key did not match active ?session");
+  }
 
   // Mobile sanity: shell should still render and nav can be toggled.
   await page.setViewportSize({ width: 390, height: 844 });

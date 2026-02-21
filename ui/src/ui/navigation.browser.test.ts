@@ -420,4 +420,40 @@ describe("control UI routing", () => {
     expect(app.inspectorTab).toBe("debug");
     expect(app.querySelector('[data-testid="inspector-debug-panel"]')).not.toBeNull();
   });
+
+  it("shows details tab session key matching deep-link session", async () => {
+    const app = mountApp("/chat?session=explicit-y");
+    await app.updateComplete;
+
+    app.sidebarOpen = true;
+    app.inspectorTab = "details";
+    app.sessionsResult = {
+      ts: Date.now(),
+      path: "~/.openclaw/sessions.json",
+      count: 2,
+      defaults: { model: null, contextTokens: null },
+      sessions: [
+        {
+          key: "main",
+          kind: "direct",
+          updatedAt: Date.now(),
+          surface: "local",
+          modelProvider: "openai",
+          model: "gpt-4.1-mini",
+        },
+        {
+          key: "explicit-y",
+          kind: "direct",
+          updatedAt: Date.now(),
+          surface: "discord",
+          modelProvider: "openai",
+          model: "gpt-4.1-mini",
+        },
+      ],
+    };
+    await app.updateComplete;
+
+    const keyNode = app.querySelector('[data-testid="inspector-details-session-key"]');
+    expect(keyNode?.textContent?.trim()).toBe("explicit-y");
+  });
 });
