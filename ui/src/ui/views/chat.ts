@@ -72,6 +72,7 @@ export type ChatProps = {
   onCloseSidebar?: () => void;
   onInspectorTabChange?: (tab: InspectorTab) => void;
   onSplitRatioChange?: (ratio: number) => void;
+  onUiToast?: (message: string, tone?: "info" | "success" | "danger") => void;
   onChatScroll?: (event: Event) => void;
 };
 
@@ -364,8 +365,12 @@ export function renderChat(props: ChatProps) {
                                 @click=${async () => {
                                   try {
                                     await navigator.clipboard.writeText(props.sessionKey);
+                                    props.onUiToast?.("Session key copied", "success");
                                   } catch {
-                                    // Clipboard API can be unavailable in restricted browser contexts.
+                                    props.onUiToast?.(
+                                      "Clipboard unavailable in this browser context",
+                                      "info",
+                                    );
                                   }
                                 }}
                               >

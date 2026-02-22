@@ -601,6 +601,24 @@
   flex-shrink: 0;
 }
 
+.shell-toast {
+  margin: 0 8px 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-alt);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.shell-toast--success {
+  border-color: color-mix(in srgb, var(--ok) 48%, var(--line-strong));
+}
+
+.shell-toast--danger {
+  border-color: color-mix(in srgb, var(--danger) 48%, var(--line-strong));
+}
+
 /* ===========================================
    Grid Utilities
    =========================================== */

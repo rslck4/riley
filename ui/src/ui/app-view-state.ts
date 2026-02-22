@@ -46,6 +46,8 @@ export type AppViewState = {
   themeResolved: "light" | "dark";
   hello: GatewayHelloOk | null;
   lastError: string | null;
+  uiToastMessage: string | null;
+  uiToastTone: "info" | "success" | "danger";
   eventLog: EventLogEntry[];
   assistantName: string;
   assistantAvatar: string | null;
@@ -74,6 +76,7 @@ export type AppViewState = {
   inspectorTab: import("./types.js").InspectorTab;
   splitRatio: number;
   scrollToBottom: (opts?: { smooth?: boolean }) => void;
+  showUiToast: (message: string, tone?: "info" | "success" | "danger") => void;
   devicesLoading: boolean;
   devicesError: string | null;
   devicesList: DevicePairingList | null;

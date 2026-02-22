@@ -498,4 +498,31 @@ describe("control UI routing", () => {
     expect(agentChip?.textContent?.includes("Agent:")).toBe(true);
     expect(sessionChip?.textContent?.trim()).toBe("Session: explicit-y");
   });
+
+  it("shows toast feedback after copying session key from details tab", async () => {
+    const app = mountApp("/chat?session=main");
+    await app.updateComplete;
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    app.sidebarOpen = true;
+    app.inspectorTab = "details";
+    await app.updateComplete;
+
+    const copyButton = app.querySelector<HTMLButtonElement>(
+      '[data-testid="inspector-details-copy-session-key"]',
+    );
+    expect(copyButton).not.toBeNull();
+    copyButton?.click();
+    await Promise.resolve();
+    await app.updateComplete;
+
+    expect(writeText).toHaveBeenCalledWith("main");
+    const toast = app.querySelector('[data-testid="shell-toast"]');
+    expect(toast?.textContent?.includes("Session key copied")).toBe(true);
+  });
 });
