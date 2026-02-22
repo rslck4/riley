@@ -113,6 +113,8 @@ export class OpenClawApp extends LitElement {
   @state() themeResolved: ResolvedTheme = "dark";
   @state() hello: GatewayHelloOk | null = null;
   @state() lastError: string | null = null;
+  @state() uiToastMessage: string | null = null;
+  @state() uiToastTone: "info" | "success" | "danger" = "info";
   @state() eventLog: EventLogEntry[] = [];
   private eventLogBuffer: EventLogEntry[] = [];
   private toolStreamSyncTimer: number | null = null;
@@ -336,6 +338,7 @@ export class OpenClawApp extends LitElement {
   private logsPollInterval: number | null = null;
   private debugPollInterval: number | null = null;
   private logsScrollFrame: number | null = null;
+  private uiToastTimeout: number | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
   refreshSessionsAfterChat = new Set<string>();
@@ -392,6 +395,10 @@ export class OpenClawApp extends LitElement {
   }
 
   disconnectedCallback() {
+    if (this.uiToastTimeout) {
+      window.clearTimeout(this.uiToastTimeout);
+      this.uiToastTimeout = null;
+    }
     handleDisconnected(this as unknown as Parameters<typeof handleDisconnected>[0]);
     super.disconnectedCallback();
   }
@@ -437,6 +444,18 @@ export class OpenClawApp extends LitElement {
       true,
       Boolean(opts?.smooth),
     );
+  }
+
+  showUiToast(message: string, tone: "info" | "success" | "danger" = "info") {
+    this.uiToastMessage = message;
+    this.uiToastTone = tone;
+    if (this.uiToastTimeout) {
+      window.clearTimeout(this.uiToastTimeout);
+    }
+    this.uiToastTimeout = window.setTimeout(() => {
+      this.uiToastMessage = null;
+      this.uiToastTimeout = null;
+    }, 2500);
   }
 
   async loadAssistantIdentity() {

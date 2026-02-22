@@ -287,6 +287,20 @@ export function renderApp(state: AppViewState) {
             ${isChat ? renderChatControls(state) : nothing}
           </div>
         </section>
+        ${
+          state.uiToastMessage
+            ? html`
+                <div
+                  class="shell-toast shell-toast--${state.uiToastTone}"
+                  role="status"
+                  aria-live="polite"
+                  data-testid="shell-toast"
+                >
+                  ${state.uiToastMessage}
+                </div>
+              `
+            : nothing
+        }
 
         ${
           state.tab === "overview"
@@ -928,6 +942,7 @@ export function renderApp(state: AppViewState) {
                 onCloseSidebar: () => state.handleCloseSidebar(),
                 onInspectorTabChange: (tab) => (state.inspectorTab = tab),
                 onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
+                onUiToast: (message, tone) => state.showUiToast(message, tone),
                 assistantName: state.assistantName,
                 assistantAgentId: state.assistantAgentId,
                 assistantAvatar: state.assistantAvatar,
