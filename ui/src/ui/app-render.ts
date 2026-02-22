@@ -124,6 +124,9 @@ export function renderApp(state: AppViewState) {
     state.agentsList?.defaultId ??
     state.agentsList?.agents?.[0]?.id ??
     null;
+  const workspaceSessionLabel = state.sessionKey || "main";
+  const workspaceAgentId =
+    parseAgentSessionKey(state.sessionKey)?.agentId ?? resolvedAgentId ?? "main";
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
@@ -254,6 +257,30 @@ export function renderApp(state: AppViewState) {
           <div>
             ${state.tab === "usage" ? nothing : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
             ${state.tab === "usage" ? nothing : html`<div class="page-sub">${subtitleForTab(state.tab)}</div>`}
+            ${
+              isChat
+                ? html`
+                    <div
+                      class="workspace-context"
+                      aria-label="Workspace context"
+                      data-testid="workspace-context"
+                    >
+                      <span
+                        class="workspace-context__chip"
+                        data-testid="workspace-context-agent"
+                      >
+                        Agent: ${workspaceAgentId}
+                      </span>
+                      <span
+                        class="workspace-context__chip"
+                        data-testid="workspace-context-session"
+                      >
+                        Session: ${workspaceSessionLabel}
+                      </span>
+                    </div>
+                  `
+                : nothing
+            }
           </div>
           <div class="page-meta">
             ${state.lastError ? html`<div class="pill danger">${state.lastError}</div>` : nothing}
