@@ -462,4 +462,16 @@ describe("control UI routing", () => {
     const keyNode = app.querySelector('[data-testid="inspector-details-session-key"]');
     expect(keyNode?.textContent?.trim()).toBe("explicit-y");
   });
+
+  it("shows workspace context chips in chat header", async () => {
+    const app = mountApp("/chat?session=explicit-y");
+    await app.updateComplete;
+
+    const context = app.querySelector('[data-testid="workspace-context"]');
+    expect(context).not.toBeNull();
+    const agentChip = app.querySelector('[data-testid="workspace-context-agent"]');
+    const sessionChip = app.querySelector('[data-testid="workspace-context-session"]');
+    expect(agentChip?.textContent?.includes("Agent:")).toBe(true);
+    expect(sessionChip?.textContent?.trim()).toBe("Session: explicit-y");
+  });
 });
