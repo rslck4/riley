@@ -342,6 +342,38 @@ export class OpenClawApp extends LitElement {
   basePath = "";
   private popStateHandler = () =>
     onPopStateInternal(this as unknown as Parameters<typeof onPopStateInternal>[0]);
+  private globalKeydownHandler = (event: KeyboardEvent) => {
+    if (this.tab !== "chat") {
+      return;
+    }
+    const target = event.target as HTMLElement | null;
+    if (target) {
+      const tag = target.tagName;
+      const isEditable =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        target.isContentEditable ||
+        (target as HTMLInputElement).type === "search";
+      if (isEditable) {
+        return;
+      }
+    }
+    const isQuickSearch =
+      (event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey);
+    const isSlash = event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey;
+    if (!isQuickSearch && !isSlash) {
+      return;
+    }
+    const filterInput = this.querySelector<HTMLInputElement>(
+      '[data-testid="chat-navigator-filter"]',
+    );
+    if (!filterInput) {
+      return;
+    }
+    event.preventDefault();
+    filterInput.focus();
+    filterInput.select();
+  };
   private themeMedia: MediaQueryList | null = null;
   private themeMediaHandler: ((event: MediaQueryListEvent) => void) | null = null;
   private topbarObserver: ResizeObserver | null = null;

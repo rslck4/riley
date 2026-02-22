@@ -323,6 +323,30 @@ describe("control UI routing", () => {
     expect(filter!.value).toBe("");
     expect(app.chatNavigatorQuery).toBe("");
   });
+
+  it("focuses session filter via global search shortcuts in chat", async () => {
+    const app = mountApp("/chat?session=main");
+    await app.updateComplete;
+
+    const filter = app.querySelector<HTMLInputElement>('[data-testid="chat-navigator-filter"]');
+    expect(filter).not.toBeNull();
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "/", bubbles: true, cancelable: true }),
+    );
+    expect(document.activeElement).toBe(filter);
+
+    filter?.blur();
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "k",
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(document.activeElement).toBe(filter);
+  });
   it("supports rename/delete chat navigator actions via existing session RPCs", async () => {
     const app = mountApp("/chat?session=project-x");
     await app.updateComplete;
