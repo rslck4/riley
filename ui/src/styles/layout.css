@@ -464,6 +464,13 @@
   white-space: nowrap;
 }
 
+.chat-session-row__metadata {
+  margin-left: auto;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
 .nav-item:hover {
   color: var(--text);
   background: var(--bg-hover);

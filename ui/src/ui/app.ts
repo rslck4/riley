@@ -78,6 +78,10 @@ import {
 } from "./app-tool-stream.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
+import {
+  LocalStorageClientMetadataStore,
+  type ClientMetadataSnapshot,
+} from "./metadata/client-metadata-store.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 
@@ -116,6 +120,7 @@ export class OpenClawApp extends LitElement {
   @state() uiToastMessage: string | null = null;
   @state() uiToastTone: "info" | "success" | "danger" = "info";
   @state() eventLog: EventLogEntry[] = [];
+  @state() sessionMetadata: ClientMetadataSnapshot = {};
   private eventLogBuffer: EventLogEntry[] = [];
   private toolStreamSyncTimer: number | null = null;
   private sidebarCloseTimer: number | null = null;
@@ -338,6 +343,7 @@ export class OpenClawApp extends LitElement {
   private logsPollInterval: number | null = null;
   private debugPollInterval: number | null = null;
   private logsScrollFrame: number | null = null;
+  private metadataStore = new LocalStorageClientMetadataStore();
   private uiToastTimeout: number | null = null;
   private toolStreamById = new Map<string, ToolStreamEntry>();
   private toolStreamOrder: string[] = [];
@@ -387,6 +393,7 @@ export class OpenClawApp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    this.refreshSessionMetadata();
     handleConnected(this as unknown as Parameters<typeof handleConnected>[0]);
   }
 
@@ -476,6 +483,10 @@ export class OpenClawApp extends LitElement {
 
   async loadOverview() {
     await loadOverviewInternal(this as unknown as Parameters<typeof loadOverviewInternal>[0]);
+  }
+
+  refreshSessionMetadata() {
+    this.sessionMetadata = this.metadataStore.list();
   }
 
   async loadCron() {
