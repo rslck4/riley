@@ -80,6 +80,7 @@ import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
 import {
   LocalStorageClientMetadataStore,
+  type SessionMetadata,
   type ClientMetadataSnapshot,
 } from "./metadata/client-metadata-store.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
@@ -487,6 +488,53 @@ export class OpenClawApp extends LitElement {
 
   refreshSessionMetadata() {
     this.sessionMetadata = this.metadataStore.list();
+  }
+
+  toggleSessionPinned(sessionKey: string) {
+    const current = this.sessionMetadata[sessionKey];
+    const nextPinned = !current?.pinned;
+    this.writeSessionMetadata(sessionKey, {
+      ...current,
+      pinned: nextPinned,
+      updatedAt: Date.now(),
+    });
+    this.showUiToast(nextPinned ? "Session pinned" : "Session unpinned", "success");
+  }
+
+  toggleSessionBookmarked(sessionKey: string) {
+    const current = this.sessionMetadata[sessionKey];
+    const nextBookmarked = !current?.bookmarked;
+    this.writeSessionMetadata(sessionKey, {
+      ...current,
+      bookmarked: nextBookmarked,
+      updatedAt: Date.now(),
+    });
+    this.showUiToast(nextBookmarked ? "Session bookmarked" : "Session bookmark removed", "success");
+  }
+
+  setSessionTags(sessionKey: string, tags: string[]) {
+    const normalized = tags.map((tag) => tag.trim()).filter(Boolean);
+    const current = this.sessionMetadata[sessionKey];
+    this.writeSessionMetadata(sessionKey, {
+      ...current,
+      tags: normalized,
+      updatedAt: Date.now(),
+    });
+    this.showUiToast(
+      normalized.length > 0 ? `Saved ${normalized.length} tag(s)` : "Session tags cleared",
+      "success",
+    );
+  }
+
+  private writeSessionMetadata(sessionKey: string, next: SessionMetadata) {
+    const hasData =
+      Boolean(next.pinned) || Boolean(next.bookmarked) || Boolean((next.tags?.length ?? 0) > 0);
+    if (!hasData) {
+      this.metadataStore.delete(sessionKey);
+    } else {
+      this.metadataStore.set(sessionKey, next);
+    }
+    this.refreshSessionMetadata();
   }
 
   async loadCron() {

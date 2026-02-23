@@ -80,6 +80,9 @@ export type AppViewState = {
   scrollToBottom: (opts?: { smooth?: boolean }) => void;
   showUiToast: (message: string, tone?: "info" | "success" | "danger") => void;
   refreshSessionMetadata: () => void;
+  toggleSessionPinned: (sessionKey: string) => void;
+  toggleSessionBookmarked: (sessionKey: string) => void;
+  setSessionTags: (sessionKey: string, tags: string[]) => void;
   devicesLoading: boolean;
   devicesError: string | null;
   devicesList: DevicePairingList | null;
