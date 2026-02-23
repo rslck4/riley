@@ -6,6 +6,14 @@ export type SessionMetadata = {
 };
 
 export type ClientMetadataSnapshot = Record<string, SessionMetadata>;
+export const CLIENT_METADATA_SCHEMA_VERSION = 1;
+
+type ClientMetadataEnvelopeV1 = {
+  version: typeof CLIENT_METADATA_SCHEMA_VERSION;
+  sessions: ClientMetadataSnapshot;
+};
+
+type ClientMetadataEnvelope = ClientMetadataEnvelopeV1;
 
 export interface ClientMetadataStore {
   list(): ClientMetadataSnapshot;
@@ -17,8 +25,20 @@ export interface ClientMetadataStore {
 
 const STORAGE_KEY = "openclaw.ui.metadata.v1";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function migrateSnapshot(fromVersion: number, payload: unknown): ClientMetadataSnapshot | null {
+  // Stub for forward compatibility. Add future migrations as versions evolve.
+  if (fromVersion === CLIENT_METADATA_SCHEMA_VERSION) {
+    return normalizeSnapshot(payload);
+  }
+  return null;
+}
+
 function normalizeSnapshot(input: unknown): ClientMetadataSnapshot {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
+  if (!isRecord(input)) {
     return {};
   }
   const snapshot: ClientMetadataSnapshot = {};
@@ -39,6 +59,30 @@ function normalizeSnapshot(input: unknown): ClientMetadataSnapshot {
     snapshot[sessionKey] = { tags, pinned, bookmarked, updatedAt };
   }
   return snapshot;
+}
+
+function readEnvelope(input: unknown): ClientMetadataEnvelope | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+  if (typeof input.version !== "number" || !Number.isFinite(input.version)) {
+    return null;
+  }
+  const migrated = migrateSnapshot(input.version, input.sessions);
+  if (!migrated) {
+    return null;
+  }
+  return {
+    version: CLIENT_METADATA_SCHEMA_VERSION,
+    sessions: migrated,
+  };
+}
+
+function asEnvelope(snapshot: ClientMetadataSnapshot): ClientMetadataEnvelope {
+  return {
+    version: CLIENT_METADATA_SCHEMA_VERSION,
+    sessions: snapshot,
+  };
 }
 
 export class InMemoryClientMetadataStore implements ClientMetadataStore {
@@ -107,13 +151,19 @@ export class LocalStorageClientMetadataStore implements ClientMetadataStore {
       return {};
     }
     try {
-      return normalizeSnapshot(JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      const envelope = readEnvelope(parsed);
+      if (envelope) {
+        return envelope.sessions;
+      }
+      // Legacy support: plain snapshot payload (pre-versioned envelope).
+      return normalizeSnapshot(parsed);
     } catch {
       return {};
     }
   }
 
   private write(snapshot: ClientMetadataSnapshot): void {
-    this.storage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+    this.storage.setItem(STORAGE_KEY, JSON.stringify(asEnvelope(snapshot)));
   }
 }
