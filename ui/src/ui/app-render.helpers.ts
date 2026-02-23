@@ -271,6 +271,18 @@ export function renderChatNavigator(state: AppViewState) {
           <div class="nav-group__items" aria-label=${`${group.label} sessions`}>
             ${group.entries.map((entry) => {
               const selected = entry.key === state.sessionKey;
+              const metadata = state.sessionMetadata[entry.key];
+              const hasMetadata =
+                Boolean(metadata?.pinned) ||
+                Boolean(metadata?.bookmarked) ||
+                Boolean((metadata?.tags?.length ?? 0) > 0);
+              const metadataTokens = [
+                metadata?.pinned ? "PIN" : null,
+                metadata?.bookmarked ? "BOOKMARK" : null,
+                (metadata?.tags?.length ?? 0) > 0 ? `TAGS:${metadata?.tags?.length ?? 0}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ");
               return html`
                 <div class="chat-session-row">
                   <button
@@ -282,6 +294,18 @@ export function renderChatNavigator(state: AppViewState) {
                   >
                     <span class="nav-item__icon" aria-hidden="true">${icons.fileText}</span>
                     <span class="nav-item__text">${entry.displayName ?? entry.key}</span>
+                    ${
+                      hasMetadata
+                        ? html`
+                            <span
+                              class="chat-session-row__metadata"
+                              data-testid=${`session-meta-${encodeURIComponent(entry.key)}`}
+                            >
+                              ${metadataTokens}
+                            </span>
+                          `
+                        : nothing
+                    }
                   </button>
                   <div class="chat-session-row__actions">
                     <button
