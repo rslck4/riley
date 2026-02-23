@@ -311,6 +311,54 @@ export function renderChatNavigator(state: AppViewState) {
                     <button
                       class="btn btn--sm"
                       type="button"
+                      aria-label=${`Toggle pin for session ${entry.key}`}
+                      data-testid=${`session-pin-${encodeURIComponent(entry.key)}`}
+                      @click=${(event: MouseEvent) => {
+                        event.stopPropagation();
+                        state.toggleSessionPinned(entry.key);
+                      }}
+                    >
+                      ${metadata?.pinned ? "Unpin" : "Pin"}
+                    </button>
+                    <button
+                      class="btn btn--sm"
+                      type="button"
+                      aria-label=${`Toggle bookmark for session ${entry.key}`}
+                      data-testid=${`session-bookmark-${encodeURIComponent(entry.key)}`}
+                      @click=${(event: MouseEvent) => {
+                        event.stopPropagation();
+                        state.toggleSessionBookmarked(entry.key);
+                      }}
+                    >
+                      ${metadata?.bookmarked ? "Unbookmark" : "Bookmark"}
+                    </button>
+                    <button
+                      class="btn btn--sm"
+                      type="button"
+                      aria-label=${`Edit tags for session ${entry.key}`}
+                      data-testid=${`session-tags-${encodeURIComponent(entry.key)}`}
+                      @click=${(event: MouseEvent) => {
+                        event.stopPropagation();
+                        const existing = metadata?.tags ?? [];
+                        const raw = window.prompt(
+                          "Enter comma-separated tags for this session",
+                          existing.join(", "),
+                        );
+                        if (raw === null) {
+                          return;
+                        }
+                        const nextTags = raw
+                          .split(",")
+                          .map((part) => part.trim())
+                          .filter(Boolean);
+                        state.setSessionTags(entry.key, nextTags);
+                      }}
+                    >
+                      Tags
+                    </button>
+                    <button
+                      class="btn btn--sm"
+                      type="button"
                       aria-label=${`Rename session ${entry.key}`}
                       data-testid=${`session-rename-${encodeURIComponent(entry.key)}`}
                       @click=${(event: MouseEvent) => {

@@ -383,6 +383,55 @@ describe("control UI routing", () => {
     expect(badge?.textContent?.includes("TAGS:2")).toBe(true);
   });
 
+  it("supports local metadata actions for pin/bookmark/tags", async () => {
+    const app = mountApp("/chat?session=main");
+    await app.updateComplete;
+
+    app.sessionsResult = {
+      ts: Date.now(),
+      path: "~/.openclaw/sessions.json",
+      count: 2,
+      defaults: { model: null, contextTokens: null },
+      sessions: [
+        { key: "main", kind: "direct", updatedAt: Date.now() },
+        { key: "project-x", kind: "direct", updatedAt: Date.now() },
+      ],
+    };
+    await app.updateComplete;
+
+    const pinButton = app.querySelector<HTMLButtonElement>('[data-testid="session-pin-project-x"]');
+    const bookmarkButton = app.querySelector<HTMLButtonElement>(
+      '[data-testid="session-bookmark-project-x"]',
+    );
+    expect(pinButton).not.toBeNull();
+    expect(bookmarkButton).not.toBeNull();
+
+    pinButton?.click();
+    await app.updateComplete;
+
+    bookmarkButton?.click();
+    await app.updateComplete;
+
+    const promptSpy = vi.spyOn(window, "prompt").mockReturnValue("alpha, beta");
+    const tagsButton = app.querySelector<HTMLButtonElement>(
+      '[data-testid="session-tags-project-x"]',
+    );
+    expect(tagsButton).not.toBeNull();
+    tagsButton?.click();
+    await app.updateComplete;
+    promptSpy.mockRestore();
+
+    const badge = app.querySelector('[data-testid="session-meta-project-x"]');
+    expect(badge).not.toBeNull();
+    expect(badge?.textContent?.includes("PIN")).toBe(true);
+    expect(badge?.textContent?.includes("BOOKMARK")).toBe(true);
+    expect(badge?.textContent?.includes("TAGS:2")).toBe(true);
+
+    const stored = localStorage.getItem("openclaw.ui.metadata.v1");
+    expect(stored).not.toBeNull();
+    expect(stored?.includes("project-x")).toBe(true);
+  });
+
   it("supports rename/delete chat navigator actions via existing session RPCs", async () => {
     const app = mountApp("/chat?session=project-x");
     await app.updateComplete;
