@@ -108,6 +108,19 @@ try {
     throw new Error("inspector details session key did not match active ?session");
   }
 
+  // Ops route sanity: cron/logs/config views should be reachable via shell navigation.
+  await page.getByTestId("primary-nav-cron").click();
+  await page.waitForURL(/\/cron$/);
+  await page.getByTestId("active-view-cron").waitFor({ timeout: 20_000 });
+
+  await page.getByTestId("primary-nav-logs").click();
+  await page.waitForURL(/\/logs$/);
+  await page.getByTestId("active-view-logs").waitFor({ timeout: 20_000 });
+
+  await page.getByTestId("primary-nav-config").click();
+  await page.waitForURL(/\/config$/);
+  await page.getByTestId("active-view-config").waitFor({ timeout: 20_000 });
+
   // Mobile sanity: shell should still render and nav can be toggled.
   await page.setViewportSize({ width: 390, height: 844 });
   const collapseButton = page.getByRole("button", { name: /collapse sidebar|expand sidebar/i });
