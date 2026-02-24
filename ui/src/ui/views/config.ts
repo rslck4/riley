@@ -559,6 +559,8 @@ export function renderConfig(props: ConfigProps) {
           <div class="config-actions__right">
             <button
               class="btn btn--sm"
+              data-testid="config-reload-button"
+              aria-label="Reload config"
               ?disabled=${props.loading}
               @click=${props.onReload}
             >
@@ -566,6 +568,8 @@ export function renderConfig(props: ConfigProps) {
             </button>
             <button
               class="btn btn--sm primary"
+              data-testid="config-save-button"
+              aria-label="Save config"
               ?disabled=${!canSave}
               @click=${props.onSave}
             >
@@ -573,6 +577,8 @@ export function renderConfig(props: ConfigProps) {
             </button>
             <button
               class="btn btn--sm"
+              data-testid="config-apply-button"
+              aria-label="Apply config"
               ?disabled=${!canApply}
               @click=${props.onApply}
             >
@@ -580,6 +586,8 @@ export function renderConfig(props: ConfigProps) {
             </button>
             <button
               class="btn btn--sm"
+              data-testid="config-update-button"
+              aria-label="Run update"
               ?disabled=${!canUpdate}
               @click=${props.onUpdate}
             >

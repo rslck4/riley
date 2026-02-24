@@ -220,7 +220,7 @@ try {
   await page.getByTestId("active-view-logs").waitFor({ timeout: 20_000 });
   // Logs tail/filter sanity.
   await requestGateway("logs.tail", { limit: 100, level: "info" });
-  const logsFilter = page.getByPlaceholder("Search logs");
+  const logsFilter = page.getByTestId("logs-filter-input");
   await logsFilter.fill("smoke-filter-token");
   if ((await logsFilter.inputValue()) !== "smoke-filter-token") {
     throw new Error("logs filter input did not accept typed value");
@@ -230,7 +230,7 @@ try {
   await page.waitForURL(/\/config$/);
   await page.getByTestId("active-view-config").waitFor({ timeout: 20_000 });
   // Config safety gate sanity: apply must remain disabled with no unsaved changes.
-  const applyButton = page.getByRole("button", { name: "Apply" });
+  const applyButton = page.getByTestId("config-apply-button");
   await applyButton.waitFor({ timeout: 20_000 });
   if (await applyButton.isEnabled()) {
     throw new Error("config apply safety gate failed: Apply should be disabled with no changes");

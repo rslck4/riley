@@ -82,6 +82,8 @@ export function renderLogs(props: LogsProps) {
         <label class="field" style="min-width: 220px;">
           <span>Filter</span>
           <input
+            aria-label="Filter logs"
+            data-testid="logs-filter-input"
             .value=${props.filterText}
             @input=${(e: Event) => props.onFilterTextChange((e.target as HTMLInputElement).value)}
             placeholder="Search logs"

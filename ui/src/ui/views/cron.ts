@@ -82,7 +82,13 @@ export function renderCron(props: CronProps) {
           </div>
         </div>
         <div class="row" style="margin-top: 12px;">
-          <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
+          <button
+            class="btn"
+            data-testid="cron-refresh-button"
+            aria-label="Refresh cron"
+            ?disabled=${props.loading}
+            @click=${props.onRefresh}
+          >
             ${props.loading ? "Refreshing…" : "Refresh"}
           </button>
           ${props.error ? html`<span class="muted">${props.error}</span>` : nothing}
