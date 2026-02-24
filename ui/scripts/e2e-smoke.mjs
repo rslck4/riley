@@ -9,6 +9,8 @@ if (!token) {
 
 const baseUrl = (process.env.E2E_UI_BASE_URL ?? "http://127.0.0.1:18789/").trim();
 const gatewayUrl = (process.env.E2E_GATEWAY_URL ?? "ws://127.0.0.1:18789").trim();
+const entryUrl = new URL(baseUrl);
+entryUrl.searchParams.set("session", "main");
 
 const defaults = {
   gatewayUrl,
@@ -45,7 +47,7 @@ async function requestGateway(rpcMethod, rpcParams = {}) {
 }
 
 try {
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+  await page.goto(entryUrl.toString(), { waitUntil: "domcontentloaded" });
 
   await page.getByText("Health").waitFor({ timeout: 20_000 });
   await page.getByText("OK").waitFor({ timeout: 20_000 });
@@ -56,7 +58,11 @@ try {
 
   const chatLink = page.getByRole("link", { name: "Chat" });
   await chatLink.click();
-  await page.waitForURL(/\/(chat)?$/);
+  await page.waitForURL(/\/(chat)?(?:\?.*)?$/);
+  const currentUrl = new URL(page.url());
+  if (currentUrl.searchParams.get("session") !== "main") {
+    throw new Error("deep-link session query was not preserved for chat view");
+  }
   await page.getByLabel("Sessions").waitFor({ timeout: 20_000 });
   const activeSessionRow = page.getByTestId("session-row-main");
   await activeSessionRow.waitFor({ timeout: 20_000 });
